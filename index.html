@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>الساري للبث الأرضي - نظام إدارة المركز</title>
+  <meta name="description" content="نظام إدارة المركز للمبيعات والوكلاء والديون والمشتركين والباركود للبث الأرضي في العراق">
+  <meta property="og:title" content="الساري للبث الأرضي">
+  <meta property="og:description" content="نظام إدارة المركز للمبيعات والوكلاء والديون والمشتركين والباركود">
+  <meta property="og:type" content="website">
+  <meta name="theme-color" content="#245b89">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="الساري">
+  
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/png" href="/logo.png">
+  <link rel="apple-touch-icon" href="/logo.png">
+  
+  <!-- Google Fonts: Cairo & Tajawal -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="/styles.css?v=30">
+
+  <!-- SheetJS for Excel Import/Export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  
+  <!-- QRCode.js for Barcode/QR generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <!-- Firebase Compat SDK (v10.13.2 / 12 compat) from gstatic -->
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-performance-compat.js"></script>
+
+  <!-- Sentry Real-time Error Tracking SDK -->
+  <script src="https://browser.sentry-cdn.com/8.38.0/bundle.tracing.min.js" crossorigin="anonymous"></script>
+  <script src="/monitoring.js"></script>
+</head>
+<body>
+
+  <!-- ========================================================================
+       LOGIN SCREEN
+       ======================================================================== -->
+  <div id="login-view" class="login-container">
+    <div class="login-card">
+      <div class="login-logo">
+        <img src="/logo.png" alt="شعار الساري للبث الأرضي" class="app-logo-circle">
+      </div>
+      <h1 class="login-title">الساري للبث الأرضي</h1>
+      <p class="login-subtitle">الوكيل الرسمي لقنوات الرابعة الرياضية - إدارة المركز والوكلاء</p>
+
+      <form id="login-form">
+        <div class="form-group" style="margin-bottom: 14px; text-align: right;">
+          <label for="login-username">اسم الحساب / المستخدم</label>
+          <input type="text" id="login-username" placeholder="مثال: admin أو ahmed" required autocomplete="username" autofocus>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 20px; text-align: right;">
+          <label for="login-password">كلمة المرور</label>
+          <input type="password" id="login-password" placeholder="••••••••" required autocomplete="current-password">
+        </div>
+
+        <div id="login-error" style="color: var(--danger); font-size: 0.85rem; font-weight: 700; margin-bottom: 14px; display: none;"></div>
+
+        <button type="submit" class="btn btn-primary" id="btn-submit-login" style="width: 100%;">
+          تسجيل الدخول
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       MAIN APP INTERFACE
+       ======================================================================== -->
+  <div id="app-view" style="display: none;">
+    <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+    
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-brand-icon">
+          <img src="/logo.png" alt="الساري للبث الأرضي" class="app-sidebar-logo">
+        </div>
+        <div class="sidebar-brand-text">
+          <h2>الساري</h2>
+          <span class="brand-sub">للبث الأرضي</span>
+        </div>
+      </div>
+
+      <div class="sidebar-badge" id="sidebar-role-label">نظام إدارة المركز - رئيسي</div>
+
+      <!-- Navigation for Admin -->
+      <nav class="sidebar-nav" id="sidebar-nav-admin">
+        <a class="nav-item active" data-page="dashboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+          <span>الداشبورد</span>
+        </a>
+        <a class="nav-item" data-page="sales">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
+          <span>المبيعات</span>
+        </a>
+        <a class="nav-item" data-page="pending-requests">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span>الطلبات المعلقة</span>
+          <span id="pending-requests-badge" class="badge badge-danger" style="display: none; padding: 2px 6px; border-radius: 10px; font-size: 0.7rem; margin-right: 5px;">0</span>
+        </a>
+        <a class="nav-item" data-page="agents">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span>الوكلاء</span>
+        </a>
+        <a class="nav-item" data-page="debts">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+          <span>الديون</span>
+        </a>
+        <a class="nav-item" data-page="subscribers">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></svg>
+          <span>المشتركون</span>
+        </a>
+        <a class="nav-item" data-page="barcodes">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 5v14"/><path d="M8 5v14"/><path d="M12 5v14"/><path d="M17 5v14"/><path d="M21 5v14"/></svg>
+          <span>الأكواد والباركود</span>
+        </a>
+        <a class="nav-item" data-page="reports">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          <span>التقارير والاهداف</span>
+        </a>
+        <a class="nav-item" data-page="products">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+          <span>المنتجات</span>
+        </a>
+        <a class="nav-item" data-page="pricing">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 18V6"/></svg>
+          <span>الأسعار</span>
+        </a>
+        <a class="nav-item" data-page="users">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span>حساب الادمن</span>
+        </a>
+      </nav>
+
+      <!-- Navigation for Agent -->
+      <nav class="sidebar-nav" id="sidebar-nav-agent" style="display: none;">
+        <a class="nav-item active" data-page="agent-dash">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+          <span>لوحة الوكيل</span>
+        </a>
+        <a class="nav-item" data-page="products">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+          <span>المنتجات والهدف</span>
+        </a>
+      </nav>
+
+      <!-- Current User Footer -->
+      <div class="sidebar-footer">
+        <div class="current-user-card">
+          <div class="user-avatar" id="sidebar-user-avatar">س</div>
+          <div class="user-details">
+            <div class="user-name" id="sidebar-user-name">المدير العام</div>
+            <span class="user-role" id="sidebar-user-role">أدمن رئيسي</span>
+          </div>
+          <button class="icon-btn btn-del" id="btn-quick-logout" title="تسجيل الخروج">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+          </button>
+        </div>
+      </div>
+      <div style="padding: 8px 12px; text-align: center; border-top: 1px solid var(--line); font-size: 0.65rem; color: var(--muted); opacity: 0.8; letter-spacing: 0.5px;">
+        تصميم وبرمجة | م.ياسر المعجون
+      </div>
+    </aside>
+
+    <!-- Main Content Wrapper -->
+    <div class="main-wrapper">
+      <!-- Top Bar -->
+      <header class="topbar">
+        <div class="topbar-right">
+          <button class="menu-toggle-btn" id="menu-toggle-btn" aria-label="القائمة">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="3" x2="21" y1="6" y2="6"/><line x1="3" x2="21" y1="12" y2="12"/><line x1="3" x2="21" y1="18" y2="18"/></svg>
+          </button>
+          <div class="topbar-breadcrumb">
+            <strong id="topbar-current-page">الداشبورد</strong>
+          </div>
+        </div>
+
+        <div class="topbar-left">
+          <div class="date-pill" id="topbar-date">Sunday, Oct 4, 2026</div>
+
+          <!-- Real-Time Notification Bell & Badge -->
+          <div class="topbar-notif-container" id="topbar-notif-container">
+            <button class="top-action-btn notif-bell-btn" id="btn-topbar-notifications" title="الإشعارات والتعميمات الإدارية" aria-label="الإشعارات والتعميمات">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+              </svg>
+              <span class="notif-badge" id="topbar-notif-badge" style="display: none;">0</span>
+            </button>
+
+            <!-- Real-time Notifications Dropdown Feed -->
+            <div class="notif-dropdown" id="notif-dropdown">
+              <div class="notif-dropdown-header">
+                <div class="notif-header-title">
+                  <span style="font-size: 1.15rem;">📢</span>
+                  <strong>الإشعارات والتعميمات</strong>
+                  <span class="notif-count-pill" id="notif-dropdown-count">0</span>
+                </div>
+                <div class="notif-header-actions">
+                  <button type="button" class="notif-action-btn" id="btn-mark-all-notifs-read" title="تحديد جميع الإشعارات كمقروءة">
+                    ✓ تحديد الكل كمقروء
+                  </button>
+                </div>
+              </div>
+
+              <div class="notif-dropdown-body" id="notif-dropdown-list">
+                <!-- Dynamically populated by app-notifications.js -->
+              </div>
+
+              <div class="notif-dropdown-footer" id="notif-dropdown-footer">
+                <!-- Populated dynamically based on user role -->
+              </div>
+            </div>
+
+            <!-- Mobile & Screen-Safe Backdrop -->
+            <div id="notif-backdrop" class="notif-backdrop" onclick="window.closeNotificationDropdown()" style="display: none;"></div>
+          </div>
+
+          <!-- Theme toggle ◐ -->
+          <button class="top-action-btn" id="btn-toggle-theme" title="الوضع الليلي / النهاري">
+            ◐
+          </button>
+
+          <!-- Sync/Refresh ↻ -->
+          <button class="top-action-btn" id="btn-sync-data" title="تحديث ومزامنة البيانات">
+            ↻
+          </button>
+
+          <!-- Install PWA ⇩ -->
+          <button class="top-action-btn" id="btn-pwa-install" title="تثبيت التطبيق على الجهاز" style="display: none;">
+            ⇩
+          </button>
+
+          <!-- Logout 🚪 -->
+          <button class="top-action-btn btn-logout" id="btn-topbar-logout" title="تسجيل الخروج">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Dynamic Page Container -->
+      <main id="main-content">
+        <!-- Rendered dynamically by app.js -->
+      </main>
+
+      <!-- Circular Scroll to Top Button (دائرة سهم للرجوع إلى الأعلى) -->
+      <button id="btn-scroll-to-top" class="scroll-to-top-btn" title="الرجوع إلى الأعلى" aria-label="الرجوع إلى الأعلى">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="19" x2="12" y2="5"></line>
+          <polyline points="5 12 12 5 19 12"></polyline>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       MODALS CONTAINER
+       ======================================================================== -->
+  <div id="modal-container"></div>
+
+  <!-- Admin Broadcast Announcement Modal -->
+  <div id="broadcast-modal" class="broadcast-modal-backdrop" style="display: none;">
+    <div class="broadcast-modal-content">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--line); padding-bottom: 12px;">
+        <h3 style="margin: 0; font-size: 1.15rem; color: var(--ink); display: flex; align-items: center; gap: 8px;">
+          <span>📢</span>
+          <span>بث تعميم إداري جديد</span>
+        </h3>
+        <button type="button" class="icon-btn" onclick="window.closeBroadcastModal()" title="إغلاق" style="border: none; background: none; font-size: 1.2rem; cursor: pointer; color: var(--muted);">
+          ✕
+        </button>
+      </div>
+
+      <form onsubmit="window.handleBroadcastSubmit(event, true); return false;">
+        <div style="margin-bottom: 14px;">
+          <label for="broadcast-modal-title" style="font-weight: 700; font-size: 0.88rem; display: block; margin-bottom: 6px;">
+            عنوان التعميم <span style="color: var(--danger);">*</span>
+          </label>
+          <input type="text" id="broadcast-modal-title" class="form-control" placeholder="مثال: تعليمات تجديد الاشتراكات وأسعار الكروت" required style="width: 100%; padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--line); font-family: inherit;">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+          <div>
+            <label for="broadcast-modal-type" style="font-weight: 700; font-size: 0.88rem; display: block; margin-bottom: 6px;">
+              تصنيف التوجيه
+            </label>
+            <select id="broadcast-modal-type" class="form-control" style="width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--line); font-family: inherit;">
+              <option value="announcement">📢 تعميم إداري عام</option>
+              <option value="directive">⚡ توجيه إداري عاجل</option>
+              <option value="financial">💰 تعليمات مالية وتسديد</option>
+              <option value="general">ℹ️ تنبيه وإشعار عام</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="broadcast-modal-target" style="font-weight: 700; font-size: 0.88rem; display: block; margin-bottom: 6px;">
+              الجهة المستهدفة
+            </label>
+            <select id="broadcast-modal-target" class="form-control" style="width: 100%; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--line); font-family: inherit;">
+              <option value="all">🌐 جميع الوكلاء والإدارة</option>
+              <option value="agents">👥 الوكلاء فقط</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Quick preset buttons -->
+        <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+          <span style="font-size: 0.75rem; color: var(--muted); font-weight: 600;">نماذج جاهزة:</span>
+          <button type="button" class="preset-chip-btn" onclick="window.fillBroadcastPreset('settlement', true)">
+            💰 تسديد الديون
+          </button>
+          <button type="button" class="preset-chip-btn" onclick="window.fillBroadcastPreset('pricing', true)">
+            🏷️ الأسعار
+          </button>
+          <button type="button" class="preset-chip-btn" onclick="window.fillBroadcastPreset('subscribers', true)">
+            🔍 الأجهزة
+          </button>
+          <button type="button" class="preset-chip-btn" onclick="window.fillBroadcastPreset('bonus', true)">
+            🎯 حوافز
+          </button>
+        </div>
+
+        <div style="margin-bottom: 18px;">
+          <label for="broadcast-modal-message" style="font-weight: 700; font-size: 0.88rem; display: block; margin-bottom: 6px;">
+            نص التوجيه أو التعميم <span style="color: var(--danger);">*</span>
+          </label>
+          <textarea id="broadcast-modal-message" class="form-control" rows="4" placeholder="اكتب هنا التوجيه أو التعميم المطلوب نشره في لوحات الوكلاء فورياً..." required style="width: 100%; padding: 12px 14px; border-radius: var(--radius-sm); border: 1px solid var(--line); font-family: inherit; font-size: 0.92rem;"></textarea>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px; align-items: center;">
+          <button type="button" class="btn btn-secondary" onclick="window.closeBroadcastModal()">
+            إلغاء
+          </button>
+          <button type="submit" id="broadcast-modal-submit-btn" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px;">
+            <span>🚀</span>
+            <span>بث وحفظ التعميم</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification Center -->
+  <div id="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="/firebase-config.js"></script>
+  <script src="/firebase-sync.js"></script>
+  <script src="/app-modules.js"></script>
+  <script src="/app-features.js"></script>
+  <script src="/app-barcodes.js"></script>
+  <script src="/chime-b64.js"></script>
+  <script src="/app-admin-tools.js"></script>
+  <script src="/app-notifications.js"></script>
+  <script src="/app.js"></script>
+
+  <!-- PWA Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').then((reg) => {
+          reg.update();
+          console.log('Service Worker registered and updated:', reg.scope);
+        }).catch((err) => {
+          console.warn('SW registration failed:', err);
+        });
+      });
+    }
+
+    // PWA Install prompt handling
+    let deferredPrompt = null;
+    const installBtn = document.getElementById('btn-pwa-install');
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      if (installBtn) installBtn.style.display = 'inline-flex';
+    });
+
+    if (installBtn) {
+      installBtn.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        const choice = await deferredPrompt.userChoice;
+        if (choice.outcome === 'accepted') {
+          installBtn.style.display = 'none';
+        }
+        deferredPrompt = null;
+      });
+    }
+  </script>
+</body>
+</html>

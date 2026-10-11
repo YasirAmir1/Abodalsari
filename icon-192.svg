@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <rect width="192" height="192" rx="36" fill="#245b89"/>
+  <circle cx="96" cy="96" r="76" fill="#1e4d73" opacity="0.5"/>
+  <!-- Broadcast tower / antenna -->
+  <g fill="none" stroke="#ffffff" stroke-linecap="round">
+    <!-- Waves left and right -->
+    <path d="M46 68 A55 55 0 0 1 46 124" stroke-width="6" opacity="0.6"/>
+    <path d="M146 68 A55 55 0 0 0 146 124" stroke-width="6" opacity="0.6"/>
+    <path d="M60 80 A35 35 0 0 1 60 112" stroke-width="6"/>
+    <path d="M132 80 A35 35 0 0 0 132 112" stroke-width="6"/>
+    <!-- Central Tower -->
+    <path d="M96 64 L74 144 M96 64 L118 144" stroke-width="7" stroke-linejoin="round"/>
+    <path d="M80 114 L112 114 M86 92 L106 92" stroke-width="5"/>
+    <line x1="96" y1="44" x2="96" y2="64" stroke-width="7"/>
+  </g>
+  <circle cx="96" cy="44" r="8" fill="#ffd166"/>
+</svg>

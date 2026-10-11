@@ -1,0 +1,6 @@
+{
+  "name": "الساري للبث الأرضي",
+  "description": "نظام إدارة المركز للمبيعات والوكلاء والديون والمشتركين والباركود للبث الأرضي في العراق",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

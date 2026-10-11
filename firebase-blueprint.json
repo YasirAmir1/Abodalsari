@@ -1,0 +1,215 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User account for admin or agent authentication",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "username": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "agent"] },
+        "agentName": { "type": "string" },
+        "agentCode": { "type": "string" },
+        "password": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["username", "role", "password"]
+    },
+    "Agent": {
+      "title": "Agent",
+      "description": "Agent profile and settings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "price": { "type": "number" },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["code", "name"]
+    },
+    "Subscriber": {
+      "title": "Subscriber",
+      "description": "Subscriber profile and subscription duration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "deviceNumber": { "type": "string" },
+        "owner": { "type": "string" },
+        "activationDate": { "type": "string" },
+        "expiryDate": { "type": "string" },
+        "status": { "type": "string", "enum": ["فعال", "غير فعال"] }
+      },
+      "required": ["name", "deviceNumber"]
+    },
+    "Sale": {
+      "title": "Sale",
+      "description": "Sale transaction record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "seller": { "type": "string" },
+        "saleType": { "type": "string" },
+        "deviceNumber": { "type": "string" },
+        "subscriptionType": { "type": "string" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "price": { "type": "number" },
+        "paymentStatus": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["customerName", "price", "saleType"]
+    },
+    "Debt": {
+      "title": "Debt",
+      "description": "Outstanding customer or agent debt record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "saleId": { "type": "string" },
+        "saleCode": { "type": "string" },
+        "customerName": { "type": "string" },
+        "seller": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "remainingAmount": { "type": "number" },
+        "dueDate": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["customerName", "totalAmount", "remainingAmount"]
+    },
+    "Pricing": {
+      "title": "Pricing",
+      "description": "System-wide and agent customized subscription pricing",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "headquarters": { "type": "object" },
+        "agentDefault": { "type": "object" },
+        "agentPrices": { "type": "object" }
+      }
+    },
+    "Template": {
+      "title": "Template",
+      "description": "WhatsApp receipt messaging template",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "whatsapp": { "type": "string" }
+      }
+    },
+    "AgentSubmission": {
+      "title": "AgentSubmission",
+      "description": "Agent sale submitted for headquarters approval",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "customerName": { "type": "string" },
+        "deviceNumber": { "type": "string" },
+        "price": { "type": "number" },
+        "status": { "type": "string" },
+        "submittedBy": { "type": "string" },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "AgentSettlement": {
+      "title": "AgentSettlement",
+      "description": "Financial payment settlement with agent",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "agentId": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string" },
+        "notes": { "type": "string" }
+      }
+    },
+    "Barcode": {
+      "title": "Barcode",
+      "description": "Device barcode inventory item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "number": { "type": "string" },
+        "status": { "type": "string" },
+        "subscriberName": { "type": "string" }
+      }
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Administrative broadcast announcements and directives synced globally via Firestore",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["announcement", "directive", "financial", "general"] },
+        "sender": { "type": "string" },
+        "senderUid": { "type": "string" },
+        "target": { "type": "string", "enum": ["all", "agents", "admin"] },
+        "createdAt": { "type": "string" },
+        "readBy": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["title", "message", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "Administrative announcements and directives broadcasted in real-time"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User account records for centralized system authentication"
+    },
+    "/agents/{agentId}": {
+      "schema": "Agent",
+      "description": "Agent profiles, codes, contact and credentials"
+    },
+    "/subscribers/{subscriberId}": {
+      "schema": "Subscriber",
+      "description": "Subscriber cards with activation and expiration details"
+    },
+    "/sales/{saleId}": {
+      "schema": "Sale",
+      "description": "Sales history records"
+    },
+    "/debts/{debtId}": {
+      "schema": "Debt",
+      "description": "Customer and agent debt accounts"
+    },
+    "/pricing/{pricingId}": {
+      "schema": "Pricing",
+      "description": "Pricing matrix for headquarters and agents"
+    },
+    "/templates/{templateId}": {
+      "schema": "Template",
+      "description": "WhatsApp and invoice templates"
+    },
+    "/agentSubmissions/{submissionId}": {
+      "schema": "AgentSubmission",
+      "description": "Pending agent sales pending approval"
+    },
+    "/agentSettlements/{settlementId}": {
+      "schema": "AgentSettlement",
+      "description": "Financial settlements paid by agents"
+    },
+    "/codes/{codeId}": {
+      "schema": "Barcode",
+      "description": "Barcode numbers and activation states"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="sariGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#245b89"/>
+      <stop offset="100%" stop-color="#163d5a"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#sariGrad)"/>
+  <circle cx="256" cy="256" r="200" fill="#1e4d73" opacity="0.3"/>
+  <g fill="none" stroke="#ffffff" stroke-linecap="round">
+    <!-- Waves left and right -->
+    <path d="M120 180 A150 150 0 0 1 120 330" stroke-width="16" opacity="0.5"/>
+    <path d="M392 180 A150 150 0 0 0 392 330" stroke-width="16" opacity="0.5"/>
+    <path d="M160 210 A95 95 0 0 1 160 300" stroke-width="16"/>
+    <path d="M352 210 A95 95 0 0 0 352 300" stroke-width="16"/>
+    <!-- Central Tower -->
+    <path d="M256 165 L195 385 M256 165 L317 385" stroke-width="18" stroke-linejoin="round"/>
+    <path d="M210 305 L302 305 M225 245 L287 245" stroke-width="14"/>
+    <line x1="256" y1="115" x2="256" y2="165" stroke-width="18"/>
+  </g>
+  <circle cx="256" cy="115" r="22" fill="#ffd166"/>
+</svg>
