@@ -486,7 +486,7 @@
       const dev = (s.deviceNumber || '').trim();
       const isDuplicate = dev && dev !== '-' && (deviceCounts[dev] > 1);
 
-      const dueStr = s.dueDate || '';
+      const dueStr = s.expiryDate || s.dueDate || '';
       let dueBadge = '';
       let rowHighlightStyle = '';
       if (isDuplicate) {
@@ -496,15 +496,19 @@
         const diffDays = Math.ceil((dueTime - todayTime) / (1000 * 60 * 60 * 24));
         if (diffDays < 0) {
           dueBadge = '<span class="badge badge-danger" style="font-weight:700;">متأخر (' + Math.abs(diffDays) + ' يوم) 🚨</span>';
-          rowHighlightStyle = 'background: rgba(239, 68, 68, 0.08);';
+          rowHighlightStyle = 'background: rgba(239, 68, 68, 0.12); border-right: 4px solid #ef4444;';
         } else if (diffDays <= 3) {
           dueBadge = '<span class="badge badge-warning" style="font-weight:700; color:#b45309; background:rgba(234,154,42,0.18);">قريب جداً (' + (diffDays === 0 ? 'اليوم' : diffDays + ' أيام') + ') ⚠️</span>';
-          rowHighlightStyle = 'background: rgba(234, 154, 42, 0.08);';
+          rowHighlightStyle = 'background: rgba(234, 154, 42, 0.12); border-right: 4px solid #f59e0b;';
         } else {
           dueBadge = '<span style="color:var(--text-sub);">' + escapeHtml(dueStr) + '</span>';
+          rowHighlightStyle = 'background: rgba(16, 185, 129, 0.08); border-right: 4px solid #10b981;';
         }
       } else {
         dueBadge = '<span style="color:var(--muted);">-</span>';
+        if (s.status === 'فعال') {
+          rowHighlightStyle = 'background: rgba(16, 185, 129, 0.08); border-right: 4px solid #10b981;';
+        }
       }
       const waLink = (s.phone && window.normalizeIraqiPhone) ? 'https://wa.me/' + window.normalizeIraqiPhone(s.phone) + '?text=' + encodeURIComponent(typeof window.formatWhatsAppMessage === 'function' ? window.formatWhatsAppMessage({ customerName: s.name, saleType: 'تجديد اشتراك', subscriptionType: 'اشتراك سنوي/شهري', price: 0, paymentStatus: 'تم التسديد', endDate: s.expiryDate, deviceNumber: s.deviceNumber }) : '') : '';
       
@@ -1275,25 +1279,23 @@
         debts = [newDebt, ...debts];
       }
 
-      await getEngine().batchCommitData([
-        { collectionName: 'subscribers', items: subs },
-        { collectionName: 'sales', items: updatedSales },
-        ...(paymentMethod === 'دين' ? [{ collectionName: 'debts', items: debts }] : [])
-      ]);
-
-      window.showToast('تم تجديد الاشتراك وحفظ الفاتورة بنجاح', 'success');
+      // Immediately close modal & update UI (Optimistic UI) for instant response
       window.closeModal();
+      window.showToast('تم تجديد الاشتراك وحفظ الفاتورة بنجاح', 'success');
       if (typeof window.renderSubscribers === 'function') {
         window.renderSubscribers(document.getElementById('main-content'));
       }
+
+      // Sync to backend asynchronously in background without blocking UI
+      getEngine().batchCommitData([
+        { collectionName: 'subscribers', items: subs },
+        { collectionName: 'sales', items: updatedSales },
+        ...(paymentMethod === 'دين' ? [{ collectionName: 'debts', items: debts }] : [])
+      ]).catch(err => console.warn('Background sync error:', err));
+
     } catch (err) {
       console.error('Error in handleAdminSubscriberRenewalSubmit:', err);
       window.showToast('حدث خطأ أثناء معالجة الطلب: ' + (err.message || ''), 'error');
-    } finally {
-      if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = submitBtn.dataset.origHTML || '💾 حفظ التفعيل';
-      }
     }
   };
 
@@ -1365,8 +1367,6 @@
 
     document.getElementById('subscriber-form').onsubmit = async (e) => {
       e.preventDefault();
-      const saveBtn = document.getElementById('btn-sub-save');
-      if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'جاري الحفظ...'; }
       try {
         const name = document.getElementById('sub-name').value.trim();
         const phone = document.getElementById('sub-phone').value.trim();
@@ -1400,17 +1400,19 @@
           });
         }
 
-        await getEngine().commitData('subscribers', subs);
-        window.showToast('تم حفظ المشترك بنجاح', 'success');
+        // Immediately close modal & update UI (Optimistic UI)
         window.closeModal();
+        window.showToast('تم حفظ المشترك بنجاح', 'success');
         if (typeof window.renderSubscribers === 'function') {
           const mainEl = document.getElementById('main-content');
           if (mainEl) window.renderSubscribers(mainEl);
         }
+
+        // Sync in background
+        getEngine().commitData('subscribers', subs).catch(err => console.warn('Background sync error:', err));
       } catch (err) {
         console.error('Error saving subscriber:', err);
         window.showToast('حدث خطأ أثناء حفظ بيانات المشترك', 'error');
-        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'حفظ المشترك'; }
       }
     };
   };
