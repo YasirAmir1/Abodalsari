@@ -577,7 +577,7 @@
         '<td>' +
           '<div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap;">' +
             '<strong class="cell-title">' + escapeHtml(s.name) + '</strong>' +
-            '<button class="btn btn-sm btn-success" onclick="openAdminSubscriberRenewalModal(\'' + s.id + '\')" title="تجديد الاشتراك وتعديل البيانات" style="padding: 1px 6px; font-size: 0.72rem; border-radius: 4px; background: var(--success, #10b981); color: #fff; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;">🔄 تجديد</button>' +
+            '<button class="btn btn-sm btn-success" onclick="openAdminSubscriberRenewalModal(\'' + s.id + '\')" title="تجديد الاشتراك وتعديل البيانات" style="padding: 1px 6px; font-size: 0.72rem; border-radius: 4px; background: var(--success, #10b981); color: #fff; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; ' + (s.status === 'فعال' ? 'display: none;' : '') + '">🔄 تجديد</button>' +
           '</div>' +
           '<div class="cell-subtitle" style="direction: ltr; text-align: right;">' + escapeHtml(s.phone || '-') + '</div>' +
         '</td>' +

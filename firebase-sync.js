@@ -362,14 +362,7 @@ class SariSyncEngine {
             }
           });
         }
-        if (Array.isArray(parsed.subscribers)) {
-          parsed.subscribers.forEach(s => {
-            if (s.owner === 'ليث جاسم' || s.owner === 'محمود فجر' || s.owner === 'LTH' || s.owner === 'MHF') {
-              s.owner = 'المركز الرئيسي';
-              changed = true;
-            }
-          });
-        }
+
         if (changed) {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
         }
@@ -439,7 +432,7 @@ class SariSyncEngine {
 
     if (dataObj.pricing && dataObj.pricing.agentPrices) {
       Object.keys(dataObj.pricing.agentPrices).forEach(k => {
-        if (['ag-mahmod-f', 'ag-laith-j', 'MHF', 'LTH'].includes(k) || isPurgedAgent(dataObj.pricing.agentPrices[k])) {
+        if (isPurgedAgent(dataObj.pricing.agentPrices[k])) {
           delete dataObj.pricing.agentPrices[k];
         }
       });
@@ -454,9 +447,6 @@ class SariSyncEngine {
         });
       }
       dataObj.subscribers.forEach(s => {
-        if (s.owner === 'ليث جاسم' || s.owner === 'محمود فجر' || s.owner === 'LTH' || s.owner === 'MHF') {
-          s.owner = 'المركز الرئيسي';
-        }
       });
     }
 
@@ -469,9 +459,6 @@ class SariSyncEngine {
         });
       }
       dataObj.sales.forEach(s => {
-        if (s.seller === 'ليث جاسم' || s.seller === 'محمود فجر' || s.seller === 'LTH' || s.seller === 'MHF') {
-          s.seller = 'المركز الرئيسي';
-        }
       });
     }
 
@@ -484,16 +471,13 @@ class SariSyncEngine {
         });
       }
       dataObj.debts.forEach(d => {
-        if (d.seller === 'ليث جاسم' || d.seller === 'محمود فجر' || d.seller === 'LTH' || d.seller === 'MHF') {
-          d.seller = 'المركز الرئيسي';
-        }
       });
     }
 
     if (Array.isArray(dataObj.agentSettlements)) {
       dataObj.agentSettlements = dataObj.agentSettlements.filter(st => {
         if (devices.size > 0 && st.deviceNumber && devices.has(String(st.deviceNumber).trim())) return false;
-        if (isPurgedAgent(st) || st.agentName === 'ليث جاسم' || st.agentName === 'محمود فجر') return false;
+        if (isPurgedAgent(st)) return false;
         return true;
       });
     }
@@ -502,13 +486,13 @@ class SariSyncEngine {
       dataObj.agentSubmissions = dataObj.agentSubmissions.filter(sub => {
         if (devices.size > 0 && sub.deviceNumber && devices.has(String(sub.deviceNumber).trim())) return false;
         if (ids.size > 0 && sub.subscriberId && ids.has(String(sub.subscriberId).trim())) return false;
-        if (isPurgedAgent(sub) || sub.seller === 'ليث جاسم' || sub.seller === 'محمود فجر' || sub.agentName === 'ليث جاسم' || sub.agentName === 'محمود فجر') return false;
+        if (isPurgedAgent(sub)) return false;
         return true;
       });
     }
 
     if (Array.isArray(dataObj.agentTargets)) {
-      dataObj.agentTargets = dataObj.agentTargets.filter(tg => !isPurgedAgent(tg) && tg.agentName !== 'ليث جاسم' && tg.agentName !== 'محمود فجر');
+      dataObj.agentTargets = dataObj.agentTargets.filter(tg => !isPurgedAgent(tg));
     }
 
     return dataObj;
@@ -557,8 +541,8 @@ class SariSyncEngine {
           pricing: pricing,
           templates: parsed.templates || { id: 'main-templates', whatsapp: DEFAULT_WHATSAPP_TEMPLATE },
           users: finalUsers,
-          agentSettlements: Array.isArray(parsed.agentSettlements) ? parsed.agentSettlements.filter(st => !isPurgedAgent(st) && st.agentName !== 'ليث جاسم' && st.agentName !== 'محمود فجر') : [],
-          agentSubmissions: Array.isArray(parsed.agentSubmissions) ? parsed.agentSubmissions.filter(sub => !isPurgedAgent(sub) && sub.seller !== 'ليث جاسم' && sub.seller !== 'محمود فجر') : [],
+          agentSettlements: Array.isArray(parsed.agentSettlements) ? parsed.agentSettlements.filter(st => !isPurgedAgent(st)) : [],
+          agentSubmissions: Array.isArray(parsed.agentSubmissions) ? parsed.agentSubmissions.filter(sub => !isPurgedAgent(sub)) : [],
           products: Array.isArray(parsed.products) && parsed.products.length > 0 ? parsed.products : DEFAULT_PRODUCTS,
           agentTargets: Array.isArray(parsed.agentTargets) ? parsed.agentTargets.filter(tg => !isPurgedAgent(tg)) : [],
           notifications: Array.isArray(parsed.notifications) ? parsed.notifications : []

@@ -3161,7 +3161,7 @@
                         ${debtStatus.html}
                       </td>
                       <td style="text-align: center;">
-                        <button type="button" class="btn btn-warning btn-sm" onclick="openAgentRenewalModal('${sub.id}')" style="font-size: 0.8rem; padding: 4px 10px; display: inline-flex; align-items: center; gap: 4px; font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,0.1);" title="فتح نافذة تجديد الاشتراك">
+                        <button type="button" class="btn btn-warning btn-sm" onclick="openAgentRenewalModal('${sub.id}')" style="font-size: 0.8rem; padding: 4px 10px; display: inline-flex; align-items: center; gap: 4px; font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,0.1); ${sub.activeStatus === 'فعال' ? 'display: none;' : ''}" title="فتح نافذة تجديد الاشتراك">
                           <span>🔄</span> <span>تجديد</span>
                         </button>
                       </td>
