@@ -3,7 +3,7 @@
  * Cache-first strategy with fallback to index.html
  */
 
-const CACHE_NAME = 'sari-cache-v31';
+const CACHE_NAME = 'sari-cache-v32';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -104,7 +104,22 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache-first for other static assets
+  // For application scripts, use Network-First to immediately load updates and bug fixes
+  const isScript = request.destination === 'script' || url.pathname.endsWith('.js') || url.pathname.includes('.js?');
+  if (isScript) {
+    event.respondWith(
+      fetch(request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const resClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, resClone));
+        }
+        return networkResponse;
+      }).catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  // Cache-first for other static assets (images, audio, fonts)
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
       if (cachedResponse) {

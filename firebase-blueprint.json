@@ -44,7 +44,14 @@
         "deviceNumber": { "type": "string" },
         "owner": { "type": "string" },
         "activationDate": { "type": "string" },
+        "startDate": { "type": "string" },
         "expiryDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "dueDate": { "type": "string" },
+        "paymentStatus": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "subscriptionType": { "type": "string" },
+        "price": { "type": "number" },
         "status": { "type": "string", "enum": ["فعال", "غير فعال"] }
       },
       "required": ["name", "deviceNumber"]

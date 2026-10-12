@@ -27,7 +27,11 @@ function getStoredFirebaseConfig() {
         return DEFAULT_FIREBASE_CONFIG;
       }
       if (parsed.apiKey && parsed.apiKey.length > 5) {
-        return { ...DEFAULT_FIREBASE_CONFIG, ...parsed };
+        return {
+          ...DEFAULT_FIREBASE_CONFIG,
+          ...parsed,
+          firestoreDatabaseId: DEFAULT_FIREBASE_CONFIG.firestoreDatabaseId
+        };
       }
     }
   } catch (e) {

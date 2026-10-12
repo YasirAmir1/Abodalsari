@@ -1636,8 +1636,17 @@
         if (subIdx >= 0) {
           updatedSubscribers[subIdx].name = req.customerName;
           if (req.customerPhone) updatedSubscribers[subIdx].phone = req.customerPhone;
+          updatedSubscribers[subIdx].activationDate = startDate;
+          updatedSubscribers[subIdx].startDate = startDate;
           updatedSubscribers[subIdx].expiryDate = endDate;
+          updatedSubscribers[subIdx].endDate = endDate;
+          updatedSubscribers[subIdx].dueDate = endDate;
+          updatedSubscribers[subIdx].paymentMethod = isCash ? 'نقد' : 'دين';
+          updatedSubscribers[subIdx].paymentStatus = isCash ? 'مدفوع' : 'دين';
+          updatedSubscribers[subIdx].subscriptionType = req.subscriptionType || 'اشتراك شهر واحد';
+          updatedSubscribers[subIdx].price = Number(req.price) || 0;
           updatedSubscribers[subIdx].status = 'فعال';
+          updatedSubscribers[subIdx].activeStatus = 'فعال';
           updatedSubscribers[subIdx].owner = agentName;
           updatedSubscribers[subIdx].agentName = agentName;
           if (!updatedSubscribers[subIdx].joiningDate) {
@@ -1653,8 +1662,16 @@
             agentName: agentName,
             joiningDate: startDate,
             activationDate: startDate,
+            startDate: startDate,
             expiryDate: endDate,
-            status: 'فعال'
+            endDate: endDate,
+            dueDate: endDate,
+            subscriptionType: req.subscriptionType || 'اشتراك شهر واحد',
+            paymentMethod: isCash ? 'نقد' : 'دين',
+            paymentStatus: isCash ? 'مدفوع' : 'دين',
+            price: Number(req.price) || 0,
+            status: 'فعال',
+            activeStatus: 'فعال'
           });
         }
 
@@ -1777,11 +1794,11 @@
                   <!-- Subscription fields (hidden if new device) -->
                   <div id="sf-subscription-section" style="${existing?.saleType === 'جهاز جديد' ? 'display: none;' : 'display: flex; flex-direction: column; gap: 8px;'}">
                     <div class="form-group" style="margin: 0;">
-                      <label style="font-size: 0.8rem; font-weight: 700; margin-bottom: 3px;">فترة الاشتراك *</label>
+                      <label style="font-size: 0.8rem; font-weight: 700; margin-bottom: 3px;">نوع الاشتراك *</label>
                       <select id="sf-sub" onchange="recalculateSalePrice()" style="padding: 6px 8px; font-size: 0.85rem; font-weight: 700;">
-                        <option value="اشتراك شهر واحد" ${(!existing?.subscriptionType || existing?.subscriptionType === 'اشتراك شهر واحد') ? 'selected' : ''}>اشتراك شهر واحد (1 شهر)</option>
-                        <option value="اشتراك شهرين" ${existing?.subscriptionType === 'اشتراك شهرين' ? 'selected' : ''}>اشتراك شهرين (2 شهر)</option>
-                        <option value="اشتراك 3 أشهر" ${existing?.subscriptionType === 'اشتراك 3 أشهر' ? 'selected' : ''}>اشتراك 3 أشهر (3 أشهر)</option>
+                        <option value="1 شهر" ${(!existing?.subscriptionType || existing?.subscriptionType === '1 شهر' || existing?.subscriptionType === 'اشتراك شهر واحد') ? 'selected' : ''}>1 شهر</option>
+                        <option value="2 شهر" ${(existing?.subscriptionType === '2 شهر' || existing?.subscriptionType === 'اشتراك شهرين') ? 'selected' : ''}>2 شهر</option>
+                        <option value="3 شهر" ${(existing?.subscriptionType === '3 شهر' || existing?.subscriptionType === 'اشتراك 3 أشهر') ? 'selected' : ''}>3 شهر</option>
                       </select>
                     </div>
 
@@ -2145,8 +2162,19 @@
             if (idx >= 0) {
               subs[idx].name = customerName;
               subs[idx].phone = customerPhone || subs[idx].phone;
-              if (!isNewDevice) subs[idx].expiryDate = subExpiry;
+              if (!isNewDevice) {
+                subs[idx].expiryDate = subExpiry;
+                subs[idx].endDate = subExpiry;
+                subs[idx].dueDate = subExpiry !== '-' ? subExpiry : '';
+              }
+              subs[idx].activationDate = startDate;
+              subs[idx].startDate = startDate;
+              subs[idx].paymentMethod = paymentMethod;
+              subs[idx].paymentStatus = paymentMethod === 'نقد' ? 'مدفوع' : 'دين';
+              subs[idx].subscriptionType = subscriptionType;
+              subs[idx].price = price;
               subs[idx].status = 'فعال';
+              subs[idx].activeStatus = 'فعال';
               if (!subs[idx].joiningDate) subs[idx].joiningDate = startDate || today;
             } else {
               subs.push({
@@ -2157,8 +2185,16 @@
                 owner: seller,
                 joiningDate: startDate || today,
                 activationDate: startDate,
+                startDate: startDate,
                 expiryDate: subExpiry,
-                status: 'فعال'
+                endDate: subExpiry,
+                dueDate: subExpiry !== '-' ? subExpiry : '',
+                subscriptionType: subscriptionType,
+                paymentMethod: paymentMethod,
+                paymentStatus: paymentMethod === 'نقد' ? 'مدفوع' : 'دين',
+                price: price,
+                status: 'فعال',
+                activeStatus: 'فعال'
               });
             }
             await getEngine().commitData('subscribers', subs);
@@ -2335,9 +2371,9 @@
     const startVal = startInput?.value || today;
 
     let months = 1;
-    if (subType === 'اشتراك شهر واحد') months = 1;
-    else if (subType === 'اشتراك شهرين') months = 2;
-    else if (subType === 'اشتراك 3 أشهر') months = 3;
+    if (subType === '1 شهر' || subType === 'اشتراك شهر واحد') months = 1;
+    else if (subType === '2 شهر' || subType === 'اشتراك شهرين') months = 2;
+    else if (subType === '3 شهر' || subType === 'اشتراك 3 أشهر') months = 3;
 
     const endVal = window.addMonthsToDate(startVal, months);
     const endInput = document.getElementById('sf-end');
@@ -2359,9 +2395,9 @@
     if (saleType === 'جهاز جديد') {
       calculated = group.device || 50000;
     } else {
-      if (subType === 'اشتراك شهر واحد') calculated = group.sub1 || 25000;
-      else if (subType === 'اشتراك شهرين') calculated = group.sub2 || 50000;
-      else if (subType === 'اشتراك 3 أشهر') calculated = group.sub3 || 75000;
+      if (subType === '1 شهر' || subType === 'اشتراك شهر واحد') calculated = group.sub1 || 25000;
+      else if (subType === '2 شهر' || subType === 'اشتراك شهرين') calculated = group.sub2 || 50000;
+      else if (subType === '3 شهر' || subType === 'اشتراك 3 أشهر') calculated = group.sub3 || 75000;
     }
 
     priceInput.value = formatNumber(calculated);

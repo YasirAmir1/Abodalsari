@@ -172,28 +172,21 @@ const DEFAULT_WHATSAPP_TEMPLATE = `السلام عليكم ورحمة الله
 
 window.DEFAULT_WHATSAPP_TEMPLATE = DEFAULT_WHATSAPP_TEMPLATE;
 
-const DEFAULT_AGENTS = [
-  {
-    id: 'ag-mahmod-f',
-    name: 'محمود فجر',
-    code: 'MHF',
-    phone: '',
-    price: 45000,
-    username: 'mahmod.f',
-    password: '123456',
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'ag-laith-j',
-    name: 'ليث جاسم',
-    code: 'LTH',
-    phone: '',
-    price: 45000,
-    username: 'laith.j',
-    password: '123456',
-    createdAt: new Date().toISOString()
-  }
-];
+function isPurgedAgent(item) {
+  if (!item) return false;
+  const code = String(item.code || item.agentCode || '').trim().toUpperCase();
+  if (code === 'LTH' || code === 'MHF') return true;
+  const username = String(item.username || '').trim().toLowerCase();
+  if (['laith.ja', 'mhmod.fjr', 'laith.j', 'mahmod.f', 'lth', 'mhf'].includes(username)) return true;
+  const id = String(item.id || item.uid || item.agentId || '').trim();
+  if (['ag-laith-j', 'ag-mahmod-f', 'u-agent-laith', 'u-agent-mahmod', 'laith.ja', 'mhmod.fjr', 'lth', 'mhf'].includes(id)) return true;
+  const name = String(item.name || item.displayName || item.agentName || '').trim();
+  if (name === 'ليث جاسم' || name === 'محمود فجر') return true;
+  return false;
+}
+window.isPurgedAgent = isPurgedAgent;
+
+const DEFAULT_AGENTS = [];
 
 const DEFAULT_USERS = [
   {
@@ -213,24 +206,6 @@ const DEFAULT_USERS = [
     agentName: '',
     agentCode: '',
     password: 'sariabod'
-  },
-  {
-    uid: 'u-agent-mahmod',
-    username: 'mahmod.f',
-    displayName: 'محمود فجر',
-    role: 'agent',
-    agentName: 'محمود فجر',
-    agentCode: 'MHF',
-    password: '123456'
-  },
-  {
-    uid: 'u-agent-laith',
-    username: 'laith.j',
-    displayName: 'ليث جاسم',
-    role: 'agent',
-    agentName: 'ليث جاسم',
-    agentCode: 'LTH',
-    password: '123456'
   }
 ];
 
@@ -358,8 +333,62 @@ class SariSyncEngine {
     this.unsubscribers = [];
     this.saveQueue = [];
     this.isSaving = false;
+    this.purgeLocalStorageOfDeletedAgents();
     this.data = this.loadLocal();
     this.initFirebase();
+  }
+
+  purgeLocalStorageOfDeletedAgents() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        let changed = false;
+        if (Array.isArray(parsed.agents)) {
+          const before = parsed.agents.length;
+          parsed.agents = parsed.agents.filter(a => !isPurgedAgent(a));
+          if (parsed.agents.length !== before) changed = true;
+        }
+        if (Array.isArray(parsed.users)) {
+          const before = parsed.users.length;
+          parsed.users = parsed.users.filter(u => !isPurgedAgent(u));
+          if (parsed.users.length !== before) changed = true;
+        }
+        if (parsed.pricing && parsed.pricing.agentPrices) {
+          ['ag-mahmod-f', 'ag-laith-j', 'MHF', 'LTH'].forEach(k => {
+            if (parsed.pricing.agentPrices[k]) {
+              delete parsed.pricing.agentPrices[k];
+              changed = true;
+            }
+          });
+        }
+        if (Array.isArray(parsed.subscribers)) {
+          parsed.subscribers.forEach(s => {
+            if (s.owner === 'ليث جاسم' || s.owner === 'محمود فجر' || s.owner === 'LTH' || s.owner === 'MHF') {
+              s.owner = 'المركز الرئيسي';
+              changed = true;
+            }
+          });
+        }
+        if (changed) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+        }
+      }
+
+      // Clear any session if currently logged in as a purged agent
+      const sess = sessionStorage.getItem('sari_active_session') || localStorage.getItem('sari_active_session');
+      if (sess) {
+        try {
+          const u = JSON.parse(sess);
+          if (isPurgedAgent(u)) {
+            sessionStorage.removeItem('sari_active_session');
+            localStorage.removeItem('sari_active_session');
+          }
+        } catch (e) {}
+      }
+    } catch (e) {
+      console.warn('purgeLocalStorageOfDeletedAgents note', e);
+    }
   }
 
   // --- Deleted Subscriber Tombstone Management (Ensures Deleted Subscribers Never Resurrect) ---
@@ -399,45 +428,87 @@ class SariSyncEngine {
   applyTombstoneFilter(dataObj) {
     if (!dataObj) return dataObj;
     const { ids, devices } = this.getDeletedSubscriberTombstones();
-    if (ids.size === 0 && devices.size === 0) return dataObj;
+
+    if (Array.isArray(dataObj.agents)) {
+      dataObj.agents = dataObj.agents.filter(a => !isPurgedAgent(a));
+    }
+
+    if (Array.isArray(dataObj.users)) {
+      dataObj.users = dataObj.users.filter(u => !isPurgedAgent(u));
+    }
+
+    if (dataObj.pricing && dataObj.pricing.agentPrices) {
+      Object.keys(dataObj.pricing.agentPrices).forEach(k => {
+        if (['ag-mahmod-f', 'ag-laith-j', 'MHF', 'LTH'].includes(k) || isPurgedAgent(dataObj.pricing.agentPrices[k])) {
+          delete dataObj.pricing.agentPrices[k];
+        }
+      });
+    }
 
     if (Array.isArray(dataObj.subscribers)) {
-      dataObj.subscribers = dataObj.subscribers.filter(s => {
-        if (s.id && ids.has(String(s.id).trim())) return false;
-        if (s.deviceNumber && devices.has(String(s.deviceNumber).trim())) return false;
-        return true;
+      if (ids.size > 0 || devices.size > 0) {
+        dataObj.subscribers = dataObj.subscribers.filter(s => {
+          if (s.id && ids.has(String(s.id).trim())) return false;
+          if (s.deviceNumber && devices.has(String(s.deviceNumber).trim())) return false;
+          return true;
+        });
+      }
+      dataObj.subscribers.forEach(s => {
+        if (s.owner === 'ليث جاسم' || s.owner === 'محمود فجر' || s.owner === 'LTH' || s.owner === 'MHF') {
+          s.owner = 'المركز الرئيسي';
+        }
       });
     }
 
     if (Array.isArray(dataObj.sales)) {
-      dataObj.sales = dataObj.sales.filter(s => {
-        if (s.deviceNumber && devices.has(String(s.deviceNumber).trim())) return false;
-        if (s.subscriberId && ids.has(String(s.subscriberId).trim())) return false;
-        return true;
+      if (ids.size > 0 || devices.size > 0) {
+        dataObj.sales = dataObj.sales.filter(s => {
+          if (s.deviceNumber && devices.has(String(s.deviceNumber).trim())) return false;
+          if (s.subscriberId && ids.has(String(s.subscriberId).trim())) return false;
+          return true;
+        });
+      }
+      dataObj.sales.forEach(s => {
+        if (s.seller === 'ليث جاسم' || s.seller === 'محمود فجر' || s.seller === 'LTH' || s.seller === 'MHF') {
+          s.seller = 'المركز الرئيسي';
+        }
       });
     }
 
     if (Array.isArray(dataObj.debts)) {
-      dataObj.debts = dataObj.debts.filter(d => {
-        if (d.deviceNumber && devices.has(String(d.deviceNumber).trim())) return false;
-        if (d.subscriberId && ids.has(String(d.subscriberId).trim())) return false;
-        return true;
+      if (ids.size > 0 || devices.size > 0) {
+        dataObj.debts = dataObj.debts.filter(d => {
+          if (d.deviceNumber && devices.has(String(d.deviceNumber).trim())) return false;
+          if (d.subscriberId && ids.has(String(d.subscriberId).trim())) return false;
+          return true;
+        });
+      }
+      dataObj.debts.forEach(d => {
+        if (d.seller === 'ليث جاسم' || d.seller === 'محمود فجر' || d.seller === 'LTH' || d.seller === 'MHF') {
+          d.seller = 'المركز الرئيسي';
+        }
       });
     }
 
     if (Array.isArray(dataObj.agentSettlements)) {
       dataObj.agentSettlements = dataObj.agentSettlements.filter(st => {
-        if (st.deviceNumber && devices.has(String(st.deviceNumber).trim())) return false;
+        if (devices.size > 0 && st.deviceNumber && devices.has(String(st.deviceNumber).trim())) return false;
+        if (isPurgedAgent(st) || st.agentName === 'ليث جاسم' || st.agentName === 'محمود فجر') return false;
         return true;
       });
     }
 
     if (Array.isArray(dataObj.agentSubmissions)) {
       dataObj.agentSubmissions = dataObj.agentSubmissions.filter(sub => {
-        if (sub.deviceNumber && devices.has(String(sub.deviceNumber).trim())) return false;
-        if (sub.subscriberId && ids.has(String(sub.subscriberId).trim())) return false;
+        if (devices.size > 0 && sub.deviceNumber && devices.has(String(sub.deviceNumber).trim())) return false;
+        if (ids.size > 0 && sub.subscriberId && ids.has(String(sub.subscriberId).trim())) return false;
+        if (isPurgedAgent(sub) || sub.seller === 'ليث جاسم' || sub.seller === 'محمود فجر' || sub.agentName === 'ليث جاسم' || sub.agentName === 'محمود فجر') return false;
         return true;
       });
+    }
+
+    if (Array.isArray(dataObj.agentTargets)) {
+      dataObj.agentTargets = dataObj.agentTargets.filter(tg => !isPurgedAgent(tg) && tg.agentName !== 'ليث جاسم' && tg.agentName !== 'محمود فجر');
     }
 
     return dataObj;
@@ -449,29 +520,22 @@ class SariSyncEngine {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        const allowedAgentNames = ['محمود فجر', 'ليث جاسم'];
-        const allowedUsernames = ['admin', 'abodsari', 'mahmod.f', 'laith.j'];
 
         const rawAgents = Array.isArray(parsed.agents) ? parsed.agents : [];
-        const cleanedAgents = rawAgents.filter(ag => allowedAgentNames.includes(ag.name) || allowedUsernames.includes(ag.username));
-        const finalAgents = cleanedAgents.length > 0 ? cleanedAgents : DEFAULT_AGENTS;
-        if (!finalAgents.some(a => a.username === 'mahmod.f')) finalAgents.push(DEFAULT_AGENTS[0]);
-        if (!finalAgents.some(a => a.username === 'laith.j')) finalAgents.push(DEFAULT_AGENTS[1]);
+        const finalAgents = rawAgents.filter(ag => !isPurgedAgent(ag));
 
         const rawUsers = Array.isArray(parsed.users) ? parsed.users : [];
-        const cleanedUsers = rawUsers.filter(u => allowedUsernames.includes(u.username) || u.role === 'admin');
-        const finalUsers = cleanedUsers.length > 0 ? cleanedUsers : DEFAULT_USERS;
-        if (!finalUsers.some(u => u.username === 'mahmod.f')) finalUsers.push(DEFAULT_USERS[2]);
-        if (!finalUsers.some(u => u.username === 'laith.j')) finalUsers.push(DEFAULT_USERS[3]);
+        const cleanedUsers = rawUsers.filter(u => !isPurgedAgent(u));
+        const finalUsers = cleanedUsers.length > 0 ? cleanedUsers : [...DEFAULT_USERS];
         if (!finalUsers.some(u => u.username === 'abodsari')) finalUsers.unshift(DEFAULT_USERS[0]);
         if (!finalUsers.some(u => u.username === 'admin')) finalUsers.unshift(DEFAULT_USERS[1]);
 
         const validAgentNames = finalAgents.map(a => a.name);
         const rawSales = Array.isArray(parsed.sales) ? parsed.sales : [];
-        const cleanedSales = rawSales.filter(s => !s.seller || s.seller === 'المركز الرئيسي' || validAgentNames.includes(s.seller));
+        const cleanedSales = rawSales.filter(s => !s.seller || s.seller === 'المركز الرئيسي' || validAgentNames.includes(s.seller) || !isPurgedAgent({ name: s.seller }));
 
         const rawDebts = Array.isArray(parsed.debts) ? parsed.debts : [];
-        const cleanedDebts = rawDebts.filter(d => !d.seller || d.seller === 'المركز الرئيسي' || validAgentNames.includes(d.seller));
+        const cleanedDebts = rawDebts.filter(d => !d.seller || d.seller === 'المركز الرئيسي' || validAgentNames.includes(d.seller) || !isPurgedAgent({ name: d.seller }));
 
         const pricing = parsed.pricing || DEFAULT_PRICING;
         if (pricing.agentPrices) {
@@ -493,10 +557,10 @@ class SariSyncEngine {
           pricing: pricing,
           templates: parsed.templates || { id: 'main-templates', whatsapp: DEFAULT_WHATSAPP_TEMPLATE },
           users: finalUsers,
-          agentSettlements: Array.isArray(parsed.agentSettlements) ? parsed.agentSettlements : [],
-          agentSubmissions: Array.isArray(parsed.agentSubmissions) ? parsed.agentSubmissions.filter(sub => validAgentNames.includes(sub.seller) || validAgentNames.includes(sub.agentName)) : [],
+          agentSettlements: Array.isArray(parsed.agentSettlements) ? parsed.agentSettlements.filter(st => !isPurgedAgent(st) && st.agentName !== 'ليث جاسم' && st.agentName !== 'محمود فجر') : [],
+          agentSubmissions: Array.isArray(parsed.agentSubmissions) ? parsed.agentSubmissions.filter(sub => !isPurgedAgent(sub) && sub.seller !== 'ليث جاسم' && sub.seller !== 'محمود فجر') : [],
           products: Array.isArray(parsed.products) && parsed.products.length > 0 ? parsed.products : DEFAULT_PRODUCTS,
-          agentTargets: Array.isArray(parsed.agentTargets) ? parsed.agentTargets : [],
+          agentTargets: Array.isArray(parsed.agentTargets) ? parsed.agentTargets.filter(tg => !isPurgedAgent(tg)) : [],
           notifications: Array.isArray(parsed.notifications) ? parsed.notifications : []
         }));
       }
@@ -554,19 +618,25 @@ class SariSyncEngine {
         }
         this.auth = firebase.auth();
         
-        // Connect to provisioned named Firestore database
+        // Connect to provisioned named Firestore database directly without instantiating (default)
         const databaseId = cfg.firestoreDatabaseId || 'ai-studio-0c2caad1-c1ee-4aef-b0cc-d86c54f7310d';
-        const normalFs = fbApp.firestore();
-        if (databaseId && databaseId !== '(default)' && typeof fbApp._getService === 'function') {
+        const FirestoreCompatClass = (firebase.firestore && firebase.firestore.Firestore);
+        if (databaseId && databaseId !== '(default)' && typeof fbApp._getService === 'function' && FirestoreCompatClass) {
           try {
             const namedDelegate = fbApp._getService('firestore', databaseId);
-            this.db = new normalFs.constructor(fbApp, namedDelegate);
+            this.db = new FirestoreCompatClass(fbApp, namedDelegate);
+            if (this.db && typeof this.db.settings === 'function') {
+              this.db.settings({
+                experimentalAutoDetectLongPolling: true,
+                merge: true
+              });
+            }
           } catch(e) {
-            console.warn('Error attaching named firestore delegate, falling back to default:', e);
-            this.db = normalFs;
+            console.warn('Error attaching named firestore delegate, falling back:', e);
+            this.db = fbApp.firestore();
           }
         } else {
-          this.db = normalFs;
+          this.db = fbApp.firestore();
         }
         console.log('Firebase initialized with projectId:', cfg.projectId, 'databaseId:', databaseId);
 
@@ -584,6 +654,9 @@ class SariSyncEngine {
   async syncInitialDataFromCentral() {
     if (!this.db || !window.isFirebaseConfigured || !window.isFirebaseConfigured()) return;
     try {
+      // Trigger background purge of deleted agents LTH and MHF from Firestore
+      this.purgeDeletedAgentsFromFirestore();
+
       // Check if users collection exists in central Firestore
       const usersSnap = await this.db.collection('users').get().catch(() => null);
       if (!usersSnap || usersSnap.empty) {
@@ -620,6 +693,61 @@ class SariSyncEngine {
       await this.fetchAllCentralCollections();
     } catch (e) {
       console.warn('Central sync warning:', e.message);
+    }
+  }
+
+  // Purge deleted agents LTH and MHF from Firestore completely
+  async purgeDeletedAgentsFromFirestore() {
+    if (!this.db || !window.isFirebaseConfigured || !window.isFirebaseConfigured()) return;
+    try {
+      const batch = this.db.batch();
+      const targetDocs = [
+        { col: 'agents', id: 'ag-mahmod-f' },
+        { col: 'agents', id: 'ag-laith-j' },
+        { col: 'agents', id: 'MHF' },
+        { col: 'agents', id: 'LTH' },
+        { col: 'users', id: 'u-agent-mahmod' },
+        { col: 'users', id: 'u-agent-laith' },
+        { col: 'users', id: 'mhmod.fjr' },
+        { col: 'users', id: 'laith.ja' },
+        { col: 'users', id: 'mhf' },
+        { col: 'users', id: 'lth' }
+      ];
+      targetDocs.forEach(item => {
+        batch.delete(this.db.collection(item.col).doc(item.id));
+        batch.delete(this.db.collection('appData').doc(item.col).collection('records').doc(item.id));
+      });
+      await batch.commit().catch(() => null);
+
+      const agSnap = await this.db.collection('agents').get().catch(() => null);
+      if (agSnap && !agSnap.empty) {
+        const b2 = this.db.batch();
+        let c2 = 0;
+        agSnap.docs.forEach(doc => {
+          if (isPurgedAgent({ id: doc.id, ...doc.data() })) {
+            b2.delete(doc.ref);
+            b2.delete(this.db.collection('appData').doc('agents').collection('records').doc(doc.id));
+            c2++;
+          }
+        });
+        if (c2 > 0) await b2.commit().catch(() => null);
+      }
+
+      const uSnap = await this.db.collection('users').get().catch(() => null);
+      if (uSnap && !uSnap.empty) {
+        const b3 = this.db.batch();
+        let c3 = 0;
+        uSnap.docs.forEach(doc => {
+          if (isPurgedAgent({ uid: doc.id, ...doc.data() })) {
+            b3.delete(doc.ref);
+            b3.delete(this.db.collection('appData').doc('users').collection('records').doc(doc.id));
+            c3++;
+          }
+        });
+        if (c3 > 0) await b3.commit().catch(() => null);
+      }
+    } catch (e) {
+      console.warn('purgeDeletedAgentsFromFirestore note:', e.message);
     }
   }
 
@@ -672,17 +800,21 @@ class SariSyncEngine {
             if (defDoc) this.data.templates = defDoc;
           } else if (col === 'notifications') {
             this.data.notifications = remoteRecords.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+          } else if (col === 'agents') {
+            this.data.agents = remoteRecords.filter(a => !isPurgedAgent(a));
           } else if (col === 'users') {
             // Deduplicate users (indexed by both username and uid)
             const seen = new Set();
             const uniqueUsers = [];
-            remoteRecords.forEach(u => {
+            remoteRecords.filter(u => !isPurgedAgent(u)).forEach(u => {
               const key = (u.username || u.uid || u.id || '').toLowerCase();
               if (key && !seen.has(key)) {
                 seen.add(key);
                 uniqueUsers.push(u);
               }
             });
+            if (!uniqueUsers.some(u => u.username === 'abodsari')) uniqueUsers.unshift(DEFAULT_USERS[0]);
+            if (!uniqueUsers.some(u => u.username === 'admin')) uniqueUsers.unshift(DEFAULT_USERS[1]);
             this.data.users = uniqueUsers;
           } else {
             this.data[col] = remoteRecords;
@@ -801,7 +933,7 @@ class SariSyncEngine {
       }
     }
 
-    if (!foundUser) {
+    if (!foundUser || isPurgedAgent(foundUser)) {
       throw new Error('اسم المستخدم غير مسجل في النظام. يرجى مراجعة إدارة المركز.');
     }
 
@@ -999,19 +1131,30 @@ class SariSyncEngine {
             if (mainDoc) this.data.templates = mainDoc;
           } else if (col === 'notifications') {
             this.data.notifications = remoteRecords.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+          } else if (col === 'agents') {
+            this.data.agents = remoteRecords.filter(a => !isPurgedAgent(a));
           } else if (col === 'users') {
             const seen = new Set();
             const uniqueUsers = [];
-            remoteRecords.forEach(u => {
+            remoteRecords.filter(u => !isPurgedAgent(u)).forEach(u => {
               const key = (u.username || u.uid || u.id || '').toLowerCase();
               if (key && !seen.has(key)) {
                 seen.add(key);
                 uniqueUsers.push(u);
               }
             });
+            if (!uniqueUsers.some(u => u.username === 'abodsari')) uniqueUsers.unshift(DEFAULT_USERS[0]);
+            if (!uniqueUsers.some(u => u.username === 'admin')) uniqueUsers.unshift(DEFAULT_USERS[1]);
             this.data.users = uniqueUsers;
           } else {
             this.data[col] = remoteRecords;
+          }
+
+          // If current user is purged agent, logout immediately
+          if (this.currentUser && isPurgedAgent(this.currentUser)) {
+            this.logout();
+            window.location.reload();
+            return;
           }
 
           // If current user is an agent, keep their active session updated with any changes from admin
@@ -1476,8 +1619,12 @@ class SariSyncEngine {
 
 window.resolveAgentName = function(record) {
   if (!record) return 'المركز الرئيسي';
+  const raw = record.seller || record.agentName || record.owner || '';
+  if (isPurgedAgent({ name: raw, code: raw, username: raw })) {
+    return 'المركز الرئيسي';
+  }
   const engine = window.syncEngine;
-  const agents = engine && engine.data ? (engine.data.agents || []) : [];
+  const agents = engine && engine.data ? (engine.data.agents || []).filter(a => !isPurgedAgent(a)) : [];
   const match = agents.find(a => 
     (record.agentId && a.id === record.agentId) ||
     (record.submittedBy && a.id === record.submittedBy) ||
@@ -1487,7 +1634,7 @@ window.resolveAgentName = function(record) {
     (record.agentName && (a.name === record.agentName || a.username === record.agentName.toLowerCase()))
   );
   if (match) return match.name;
-  return record.seller || record.agentName || record.owner || 'المركز الرئيسي';
+  return raw || 'المركز الرئيسي';
 };
 
 window.syncEngine = new SariSyncEngine();

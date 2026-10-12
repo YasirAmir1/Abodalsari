@@ -466,12 +466,47 @@
     if (mainEl) window.renderSubscribers(mainEl);
   };
 
+  window.getSubscriberTypeLabel = function(s, sales) {
+    let type = s.subscriptionType || '';
+    if (!type && sales && sales.length > 0) {
+      const subSale = sales.find(sal => (sal.deviceNumber && sal.deviceNumber === s.deviceNumber) || (sal.customerName && sal.customerName === s.name));
+      if (subSale && subSale.subscriptionType) {
+        type = subSale.subscriptionType;
+      }
+    }
+    
+    if (type) {
+      if (type.includes('12') || type.includes('سنة')) return '1 سنة';
+      if (type.includes('6')) return '6 شهر';
+      if (type.includes('3')) return '3 شهر';
+      if (type.includes('شهرين') || type.includes('2')) return '2 شهر';
+      if (type.includes('شهر واحد') || type.includes('1') || type.includes('شهر')) return '1 شهر';
+      return type;
+    }
+    
+    // Calculate from start and end dates if available
+    if (s.activationDate && s.expiryDate) {
+      const d1 = new Date(s.activationDate).getTime();
+      const d2 = new Date(s.expiryDate).getTime();
+      const diffDays = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
+      if (diffDays > 300) return '1 سنة';
+      if (diffDays > 140) return '6 شهر';
+      if (diffDays > 70) return '3 شهر';
+      if (diffDays > 40) return '2 شهر';
+      if (diffDays > 0) return '1 شهر';
+    }
+
+    return '1 شهر';
+  };
+
   function renderSubscriberRows(subs, todayTime) {
     if (subs.length === 0) {
       return '<tr><td colspan="8" style="text-align: center; color: var(--muted); padding: 30px;">لا يوجد مشتركون مطابقون</td></tr>';
     }
     const data = getData();
     const allSubs = data.subscribers || [];
+    const sales = data.sales || [];
+    const debts = data.debts || [];
     const deviceCounts = {};
     allSubs.forEach(sub => {
       const dev = (sub.deviceNumber || '').trim();
@@ -485,7 +520,7 @@
       const isDuplicate = dev && dev !== '-' && (deviceCounts[dev] > 1);
 
       const dueStr = s.expiryDate || s.dueDate || '';
-      let dueBadge = '';
+      let dueBadgeAlert = '';
       let rowHighlightStyle = '';
       if (isDuplicate) {
         rowHighlightStyle = 'background: rgba(234, 154, 42, 0.22); border-right: 4px solid #f59e0b;';
@@ -493,22 +528,50 @@
         const dueTime = new Date(dueStr).getTime();
         const diffDays = Math.ceil((dueTime - todayTime) / (1000 * 60 * 60 * 24));
         if (diffDays < 0) {
-          dueBadge = '<span class="badge badge-danger" style="font-weight:700;">متأخر (' + Math.abs(diffDays) + ' يوم) 🚨</span>';
+          dueBadgeAlert = '<span class="badge badge-danger" style="font-size:0.68rem; font-weight:700; padding:1px 5px;">متأخر (' + Math.abs(diffDays) + ' يوم) 🚨</span>';
           rowHighlightStyle = 'background: rgba(239, 68, 68, 0.12); border-right: 4px solid #ef4444;';
         } else if (diffDays <= 3) {
-          dueBadge = '<span class="badge badge-warning" style="font-weight:700; color:#b45309; background:rgba(234,154,42,0.18);">قريب جداً (' + (diffDays === 0 ? 'اليوم' : diffDays + ' أيام') + ') ⚠️</span>';
+          dueBadgeAlert = '<span class="badge badge-warning" style="font-size:0.68rem; font-weight:700; color:#b45309; background:rgba(234,154,42,0.18); padding:1px 5px;">قريب (' + (diffDays === 0 ? 'اليوم' : diffDays + ' يوم') + ') ⚠️</span>';
           rowHighlightStyle = 'background: rgba(234, 154, 42, 0.12); border-right: 4px solid #f59e0b;';
         } else {
-          dueBadge = '<span style="color:var(--text-sub);">' + escapeHtml(dueStr) + '</span>';
           rowHighlightStyle = 'background: rgba(16, 185, 129, 0.08); border-right: 4px solid #10b981;';
         }
       } else {
-        dueBadge = '<span style="color:var(--muted);">-</span>';
         if (s.status === 'فعال') {
           rowHighlightStyle = 'background: rgba(16, 185, 129, 0.08); border-right: 4px solid #10b981;';
         }
       }
       const waLink = (s.phone && window.normalizeIraqiPhone) ? 'https://wa.me/' + window.normalizeIraqiPhone(s.phone) + '?text=' + encodeURIComponent(typeof window.formatWhatsAppMessage === 'function' ? window.formatWhatsAppMessage({ customerName: s.name, saleType: 'تجديد اشتراك', subscriptionType: 'اشتراك سنوي/شهري', price: 0, paymentStatus: 'تم التسديد', endDate: s.expiryDate, deviceNumber: s.deviceNumber }) : '') : '';
+
+      // Determine subscriber amount
+      let amount = 0;
+      if (s.price !== undefined && s.price !== null && Number(s.price) > 0) {
+        amount = Number(s.price);
+      }
+      const subDebt = debts.find(d => ((d.customerName && d.customerName.includes(s.name)) || (d.saleId && sales.find(sal => sal.id === d.saleId && sal.deviceNumber === s.deviceNumber))) && Number(d.remainingAmount) > 0);
+      const isDebt = s.paymentStatus === 'دين' || s.paymentStatus === 'غير مدفوع' || s.paymentMethod === 'دين' || (subDebt && Number(subDebt.remainingAmount) > 0);
+      
+      if (isDebt && subDebt && Number(subDebt.remainingAmount) > 0) {
+        amount = Number(subDebt.remainingAmount);
+      } else if (!amount) {
+        if (subDebt && Number(subDebt.totalAmount || subDebt.remainingAmount) > 0) {
+          amount = Number(subDebt.remainingAmount || subDebt.totalAmount);
+        } else {
+          const subSales = sales.filter(sal => sal.deviceNumber === s.deviceNumber || sal.customerName === s.name);
+          if (subSales.length > 0 && Number(subSales[0].price) > 0) {
+            amount = Number(subSales[0].price);
+          } else {
+            amount = 25000;
+          }
+        }
+      }
+
+      // Determine color: Red for debt, Green for cash
+      const amountColor = isDebt ? '#dc2626' : '#16a34a';
+      const amountBg = isDebt ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)';
+      const amountBorder = isDebt ? 'rgba(239, 68, 68, 0.28)' : 'rgba(16, 185, 129, 0.28)';
+
+      const typeLabel = window.getSubscriberTypeLabel ? window.getSubscriberTypeLabel(s, sales) : (s.subscriptionType || '1 شهر');
       
       return '<tr style="' + rowHighlightStyle + '">' +
         '<td>' +
@@ -523,17 +586,11 @@
           (isDuplicate ? '<br><span style="font-size: 0.7rem; color: #b45309; font-weight: 700;">⚠️ جهاز مكرر</span>' : '') +
         '</td>' +
         '<td><span class="badge badge-neutral">' + escapeHtml(window.resolveAgentName ? window.resolveAgentName(s) : s.owner) + '</span></td>' +
-        '<td style="direction: ltr; font-size: 0.78rem;">' + escapeHtml(s.joiningDate || s.activationDate || '-') + '</td>' +
-        '<td>' +
-          '<div class="cell-date-range" style="direction: ltr;">' +
-            '<span class="cell-date-from">بدء: ' + escapeHtml(s.activationDate || '-') + '</span>' +
-            '<span class="cell-date-to">انتهاء: ' + escapeHtml(s.expiryDate || '-') + '</span>' +
-          '</div>' +
-        '</td>' +
-        '<td>' +
-          '<div style="direction: ltr; font-size: 0.82rem; font-weight: 600;">' +
-            dueBadge +
-          '</div>' +
+
+        '<td style="text-align: center; white-space: nowrap;">' +
+          '<span class="badge" style="font-weight: 700; font-size: 0.82rem; background: rgba(59, 130, 246, 0.1); color: #2563eb; border: 1px solid rgba(59, 130, 246, 0.25); padding: 3px 9px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">' +
+            '📅 ' + escapeHtml(typeLabel) +
+          '</span>' +
         '</td>' +
         '<td>' +
           '<div class="cell-badges-group">' +
@@ -541,6 +598,11 @@
             (s.paymentStatus ? ('<span class="badge ' + (s.paymentStatus === 'مدفوع' ? 'badge-success' : ((s.paymentStatus === 'دين' || s.paymentStatus === 'غير مدفوع') ? 'badge-danger' : 'badge-neutral')) + '">' + escapeHtml(s.paymentStatus === 'غير مدفوع' ? 'دين' : s.paymentStatus) + '</span>') : '<span style="color: var(--muted); font-size: 0.8rem;">-</span>') +
             ((s.status === 'غير فعال' && (s.paymentStatus === 'دين' || s.paymentStatus === 'غير مدفوع')) ? '<span title="تنبيه: غير منطقي (اشتراك غير فعال مع حالة دين/غير مدفوع)" style="font-size: 0.9rem; margin-right: 4px; cursor: help;">❓</span>' : '') +
           '</div>' +
+        '</td>' +
+        '<td style="text-align: center; white-space: nowrap;">' +
+          '<span style="font-weight: 800; font-size: 0.86rem; color: ' + amountColor + '; background: ' + amountBg + '; border: 1px solid ' + amountBorder + '; padding: 3px 9px; border-radius: 6px; display: inline-block; direction: ltr; font-family: monospace;">' +
+            formatNumber(amount) + ' د.ع' +
+          '</span>' +
         '</td>' +
         '<td style="text-align: center;">' +
           '<div class="action-btns" style="justify-content: center;">' +
@@ -568,31 +630,60 @@
 
     // Dynamic status check
     subs.forEach(s => {
-      if (s.expiryDate && s.activationDate) {
-        s.status = (s.activationDate <= today && today <= s.expiryDate) ? 'فعال' : 'غير فعال';
+      if (s.expiryDate) {
+        // If expiryDate is today or future, subscriber is active ('فعال')
+        if (s.expiryDate >= today) {
+          s.status = 'فعال';
+        } else {
+          s.status = 'غير فعال';
+        }
+      } else if (s.status) {
+        // Keep status if already set (e.g. 'فعال')
       } else {
-        s.status = '';
+        s.status = 'غير فعال';
       }
     });
 
     function checkSubscriberPaid(s) {
+      // 1. Direct saved payment status on subscriber takes precedence (taken from the saved modal)
+      if (s.paymentStatus) {
+        if (s.paymentStatus === 'مدفوع' || s.paymentStatus === 'نقد' || s.paymentStatus === 'تم التسديد') {
+          return 'مدفوع';
+        }
+        if (s.paymentStatus === 'دين' || s.paymentStatus === 'غير مدفوع') {
+          return 'دين';
+        }
+      }
+      if (s.paymentMethod) {
+        if (s.paymentMethod === 'نقد') return 'مدفوع';
+        if (s.paymentMethod === 'دين') return 'دين';
+      }
+
+      // 2. Check the most recent sale for this subscriber / device
+      const subSales = sales
+        .filter(sal => sal.deviceNumber === s.deviceNumber || sal.customerName === s.name)
+        .sort((a, b) => new Date(b.createdAt || b.startDate || 0).getTime() - new Date(a.createdAt || a.startDate || 0).getTime());
+      if (subSales.length > 0) {
+        const latestSale = subSales[0];
+        if (latestSale.paymentMethod === 'نقد' || latestSale.paymentStatus === 'نقد' || latestSale.paymentStatus === 'تم التسديد') {
+          return 'مدفوع';
+        }
+        if (latestSale.paymentMethod === 'دين' || latestSale.paymentStatus === 'دين' || latestSale.paymentStatus === 'عليه دين') {
+          return 'دين';
+        }
+      }
+
+      // 3. Check outstanding debts
+      const hasDebt = debts.some(d => ((d.customerName && d.customerName.includes(s.name)) || (d.saleId && sales.find(sal => sal.id === d.saleId && sal.deviceNumber === s.deviceNumber))) && Number(d.remainingAmount) > 0);
+      if (hasDebt) return 'دين';
+
       if (!s.activationDate || !s.expiryDate || !s.status) {
         return '';
       }
       if (s.status === 'غير فعال') {
         return 'غير مدفوع';
       }
-      const hasDebt = debts.some(d => ((d.customerName && d.customerName.includes(s.name)) || (d.saleId && sales.find(sal => sal.id === d.saleId && sal.deviceNumber === s.deviceNumber))) && Number(d.remainingAmount) > 0);
-      if (hasDebt) return 'دين';
-      const subSales = sales.filter(sal => sal.deviceNumber === s.deviceNumber || sal.customerName === s.name);
-      if (subSales.length > 0) {
-        const hasUnpaidSale = subSales.some(sal => sal.paymentStatus === 'دين' || sal.paymentStatus === 'عليه دين' || sal.paymentMethod === 'دين' || ((Number(sal.price) || 0) - (Number(sal.agentPaid) || 0) > 0));
-        if (hasUnpaidSale) return 'دين';
-        return 'مدفوع';
-      }
-      if (s.paymentStatus && (s.paymentStatus === 'مدفوع' || s.paymentStatus === 'دين' || s.paymentStatus === 'نقد')) {
-        return s.paymentStatus === 'نقد' ? 'مدفوع' : s.paymentStatus;
-      }
+
       return 'مدفوع';
     }
 
@@ -657,8 +748,18 @@
 
     if (subscriberSortBy.field) {
       subs.sort((a, b) => {
-        const valA = a[subscriberSortBy.field] || '';
-        const valB = b[subscriberSortBy.field] || '';
+        if (subscriberSortBy.field === 'price') {
+          const numA = Number(a.price || 0);
+          const numB = Number(b.price || 0);
+          return subscriberSortBy.direction === 'asc' ? numA - numB : numB - numA;
+        }
+        if (subscriberSortBy.field === 'subscriptionType') {
+          const typeA = window.getSubscriberTypeLabel ? window.getSubscriberTypeLabel(a, sales) : (a.subscriptionType || '');
+          const typeB = window.getSubscriberTypeLabel ? window.getSubscriberTypeLabel(b, sales) : (b.subscriptionType || '');
+          return subscriberSortBy.direction === 'asc' ? typeA.localeCompare(typeB) : typeB.localeCompare(typeA);
+        }
+        const valA = String(a[subscriberSortBy.field] || '');
+        const valB = String(b[subscriberSortBy.field] || '');
         if (subscriberSortBy.direction === 'asc') {
           return valA.localeCompare(valB);
         } else {
@@ -858,16 +959,16 @@
                   <th>المشترك / الهاتف</th>
                   <th>رقم الجهاز</th>
                   <th>الوكيل المسؤول</th>
-                  <th style="cursor: pointer; user-select: none;" onclick="sortSubscribersBy('joiningDate')" title="انقر للفرز حسب تاريخ الانضمام">تاريخ الانضمام ${subscriberSortBy.field === 'joiningDate' ? (subscriberSortBy.direction === 'asc' ? '⬆️' : '⬇️') : '↕️'}</th>
-                  <th style="cursor: pointer; user-select: none;" onclick="sortSubscribersBy('activationDate')" title="انقر للفرز حسب تاريخ بدء الاشتراك">فترة الاشتراك ${subscriberSortBy.field === 'activationDate' ? (subscriberSortBy.direction === 'asc' ? '⬆️' : '⬇️') : '↕️'}</th>
-                  <th style="cursor: pointer; user-select: none;" onclick="sortSubscribersBy('dueDate')" title="انقر للفرز حسب تاريخ الاستحقاق">تاريخ الاستحقاق ${subscriberSortBy.field === 'dueDate' ? (subscriberSortBy.direction === 'asc' ? '⬆️' : '⬇️') : '↕️'}</th>
+                  <th style="text-align: center; cursor: pointer; user-select: none;" onclick="sortSubscribersBy('subscriptionType')" title="انقر للفرز حسب نوع الاشتراك">نوع الاشتراك ${subscriberSortBy.field === 'subscriptionType' ? (subscriberSortBy.direction === 'asc' ? '⬆️' : '⬇️') : '↕️'}</th>
                   <th>الحالة والدفع</th>
+                  <th style="text-align: center; cursor: pointer; user-select: none;" onclick="sortSubscribersBy('price')" title="انقر للفرز حسب المبلغ">المبلغ ${subscriberSortBy.field === 'price' ? (subscriberSortBy.direction === 'asc' ? '⬆️' : '⬇️') : '↕️'}</th>
                   <th style="text-align: center;">إجراءات</th>
                 </tr>
               </thead>
               <tbody>
                 ${renderSubscriberRows(subs, todayTime)}
               </tbody>
+            </table>
           </div>
         </div>
 
@@ -1036,10 +1137,10 @@
 
     // Detect initial duration months (default 1)
     let initialMonths = 1;
-    if (sub.subscriptionType === 'اشتراك شهرين') initialMonths = 2;
-    else if (sub.subscriptionType === 'اشتراك 3 أشهر') initialMonths = 3;
-    else if (sub.subscriptionType === 'اشتراك 6 أشهر') initialMonths = 6;
-    else if (sub.subscriptionType === 'اشتراك سنة') initialMonths = 12;
+    if (sub.subscriptionType === '2 شهر' || sub.subscriptionType === 'اشتراك شهرين') initialMonths = 2;
+    else if (sub.subscriptionType === '3 شهر' || sub.subscriptionType === 'اشتراك 3 أشهر') initialMonths = 3;
+    else if (sub.subscriptionType === '6 شهر' || sub.subscriptionType === 'اشتراك 6 أشهر') initialMonths = 6;
+    else if (sub.subscriptionType === '1 سنة' || sub.subscriptionType === 'اشتراك سنة') initialMonths = 12;
 
     const initialEndDate = window.addMonthsToDate ? window.addMonthsToDate(initialStartDate, initialMonths) : initialStartDate;
 
@@ -1098,20 +1199,20 @@
                   <!-- Sub Row 1: Duration & Payment Method -->
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                     <div class="form-group" style="margin: 0;">
-                      <label style="font-size: 0.8rem; font-weight: 700; margin-bottom: 3px;">فترة الاشتراك *</label>
+                      <label style="font-size: 0.8rem; font-weight: 700; margin-bottom: 3px;">نوع الاشتراك *</label>
                       <select id="asr-duration" onchange="updateAdminSubscriberRenewalPrice()" style="padding: 6px 8px; font-size: 0.85rem; font-weight: 700;">
-                        <option value="اشتراك شهر واحد" data-months="1" ${(!sub.subscriptionType || sub.subscriptionType === 'اشتراك شهر واحد') ? 'selected' : ''}>شهر واحد (1 شهر)</option>
-                        <option value="اشتراك شهرين" data-months="2" ${sub.subscriptionType === 'اشتراك شهرين' ? 'selected' : ''}>شهرين (2 شهر)</option>
-                        <option value="اشتراك 3 أشهر" data-months="3" ${sub.subscriptionType === 'اشتراك 3 أشهر' ? 'selected' : ''}>3 أشهر (3 أشهر)</option>
-                        <option value="اشتراك 6 أشهر" data-months="6" ${sub.subscriptionType === 'اشتراك 6 أشهر' ? 'selected' : ''}>6 أشهر (نصف سنة)</option>
-                        <option value="اشتراك سنة" data-months="12" ${sub.subscriptionType === 'اشتراك سنة' ? 'selected' : ''}>سنة كاملة (12 شهر)</option>
+                        <option value="1 شهر" data-months="1" ${(!sub.subscriptionType || sub.subscriptionType === '1 شهر' || sub.subscriptionType === 'اشتراك شهر واحد') ? 'selected' : ''}>1 شهر</option>
+                        <option value="2 شهر" data-months="2" ${(sub.subscriptionType === '2 شهر' || sub.subscriptionType === 'اشتراك شهرين') ? 'selected' : ''}>2 شهر</option>
+                        <option value="3 شهر" data-months="3" ${(sub.subscriptionType === '3 شهر' || sub.subscriptionType === 'اشتراك 3 أشهر') ? 'selected' : ''}>3 شهر</option>
+                        <option value="6 شهر" data-months="6" ${(sub.subscriptionType === '6 شهر' || sub.subscriptionType === 'اشتراك 6 أشهر') ? 'selected' : ''}>6 شهر</option>
+                        <option value="1 سنة" data-months="12" ${(sub.subscriptionType === '1 سنة' || sub.subscriptionType === 'اشتراك سنة') ? 'selected' : ''}>1 سنة</option>
                       </select>
                     </div>
                     <div class="form-group" style="margin: 0;">
                       <label style="font-size: 0.8rem; font-weight: 700; margin-bottom: 3px;">طريقة الدفع *</label>
-                      <select id="asr-payment" onchange="updatePaymentSelectColor(this)" style="padding: 6px 8px; font-size: 0.85rem; font-weight: 700; color: var(--danger); border-color: var(--danger);">
-                        <option value="دين" selected style="color: var(--danger); font-weight: 700;">دين (تسجيل دين)</option>
-                        <option value="نقد" style="color: var(--success); font-weight: 700;">نقد (تم التسديد)</option>
+                      <select id="asr-payment" onchange="updatePaymentSelectColor(this)" style="padding: 6px 8px; font-size: 0.85rem; font-weight: 700; color: ${(sub.paymentMethod === 'نقد' || sub.paymentStatus === 'مدفوع' || sub.paymentStatus === 'تم التسديد') ? 'var(--success)' : 'var(--danger)'}; border-color: ${(sub.paymentMethod === 'نقد' || sub.paymentStatus === 'مدفوع' || sub.paymentStatus === 'تم التسديد') ? 'var(--success)' : 'var(--danger)'};">
+                        <option value="دين" ${!(sub.paymentMethod === 'نقد' || sub.paymentStatus === 'مدفوع' || sub.paymentStatus === 'تم التسديد') ? 'selected' : ''} style="color: var(--danger); font-weight: 700;">دين (تسجيل دين)</option>
+                        <option value="نقد" ${(sub.paymentMethod === 'نقد' || sub.paymentStatus === 'مدفوع' || sub.paymentStatus === 'تم التسديد') ? 'selected' : ''} style="color: var(--success); font-weight: 700;">نقد (تم التسديد)</option>
                       </select>
                     </div>
                   </div>
@@ -1205,7 +1306,7 @@
     if (submitBtn) {
       submitBtn.disabled = true;
       submitBtn.dataset.origHTML = submitBtn.innerHTML;
-      submitBtn.innerHTML = `<span style="display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-left:6px;"></span> جاري الحفظ...`;
+      submitBtn.innerHTML = `<span style="display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-left:6px;"></span> جاري الحفظ والتفعيل...`;
     }
 
     try {
@@ -1218,26 +1319,38 @@
       const phone = document.getElementById('asr-phone').value.trim();
       const deviceNumber = document.getElementById('asr-device').value.trim();
       const owner = document.getElementById('asr-owner').value;
-      const joiningDate = document.getElementById('asr-joining')?.value || sub.joiningDate;
+      const joiningDate = document.getElementById('asr-joining')?.value || sub.joiningDate || new Date().toISOString().substring(0, 10);
       const startDate = document.getElementById('asr-start').value;
       const subscriptionType = document.getElementById('asr-duration').value;
       const endDate = document.getElementById('asr-end').value;
       const price = parseNumber(document.getElementById('asr-price').value);
       const paymentMethod = document.getElementById('asr-payment').value;
-      const paymentStatus = paymentMethod === 'نقد' ? 'تم التسديد' : 'دين';
+      const paymentStatus = paymentMethod === 'نقد' ? 'مدفوع' : 'دين';
+      const salePaymentStatus = paymentMethod === 'نقد' ? 'تم التسديد' : 'دين';
 
-      // 1. Update subscriber
+      // 1. Update subscriber with values from modal (تحويل حالة الزبون إلى فعال وتاريخ البدء والانتهاء والدفع)
       sub.name = name;
       sub.phone = phone;
       sub.deviceNumber = deviceNumber;
       sub.owner = owner;
-      sub.joiningDate = joiningDate || sub.joiningDate;
+      sub.joiningDate = joiningDate;
       sub.activationDate = startDate;
+      sub.startDate = startDate;
       sub.expiryDate = endDate;
+      sub.endDate = endDate;
       sub.dueDate = endDate;
+      sub.subscriptionType = subscriptionType;
+      sub.price = price;
+      sub.paymentMethod = paymentMethod;
+      sub.paymentStatus = paymentStatus;
+      sub.paidAmount = paymentMethod === 'نقد' ? price : 0;
+      sub.remainingAmount = paymentMethod === 'نقد' ? 0 : price;
       sub.status = 'فعال';
+      sub.activeStatus = 'فعال';
+      sub.isActivated = true;
+      sub.lastActivatedAt = new Date().toISOString();
 
-      // 2. Create new sale
+      // 2. Create new sale record
       const saleCode = (typeof window.generateSaleCode === 'function') ? window.generateSaleCode() : ('SR-' + Math.floor(10000 + Math.random() * 90000));
       const newSale = {
         id: 'sale-' + Date.now(),
@@ -1251,7 +1364,7 @@
         startDate: startDate,
         endDate: endDate,
         price: price,
-        paymentStatus: paymentStatus,
+        paymentStatus: salePaymentStatus,
         paymentMethod: paymentMethod,
         agentPaid: paymentMethod === 'نقد' ? price : 0,
         createdAt: new Date().toISOString()
@@ -1259,7 +1372,7 @@
 
       const updatedSales = [newSale, ...(data.sales || [])];
 
-      // 3. Create debt if payment method is debt (added to agent or central main)
+      // 3. Create debt if payment method is debt
       let debts = data.debts || [];
       if (paymentMethod === 'دين') {
         const isAgent = owner && owner !== 'المركز الرئيسي';
@@ -1276,14 +1389,22 @@
           remainingAmount: price,
           dueDate: endDate,
           notes: `تجديد اشتراك بالدين (${subscriptionType})`,
-          createdAt: startDate
+          status: 'غير مسدد',
+          createdAt: startDate || new Date().toISOString().substring(0, 10)
         };
         debts = [newDebt, ...debts];
       }
 
+      // Update in-memory data
+      data.subscribers = subs;
+      data.sales = updatedSales;
+      if (paymentMethod === 'دين') {
+        data.debts = debts;
+      }
+
       // Immediately close modal & update UI (Optimistic UI) for instant response
       window.closeModal();
-      window.showToast('تم تجديد الاشتراك وحفظ الفاتورة بنجاح', 'success');
+      window.showToast('تم تفعيل وحفظ اشتراك الزبون (' + escapeHtml(name) + ') بنجاح - الحالة: فعال', 'success');
       if (typeof window.renderSubscribers === 'function') {
         window.renderSubscribers(document.getElementById('main-content'));
       }
@@ -1343,17 +1464,23 @@
               <div class="form-row">
                 <div class="form-group">
                   <label>تاريخ التفعيل</label>
-                  <input type="date" id="sub-act" value="${existing?.activationDate || ''}">
+                  <input type="date" id="sub-act" value="${existing?.activationDate || today}" onchange="updateSubModalDates()">
                 </div>
                 <div class="form-group">
-                  <label>تاريخ الانتهاء</label>
-                  <input type="date" id="sub-exp" value="${existing?.expiryDate || ''}">
+                  <label>نوع الاشتراك *</label>
+                  <select id="sub-type" onchange="updateSubModalDates()">
+                    <option value="1 شهر" data-months="1" ${(!existing?.subscriptionType || existing?.subscriptionType === '1 شهر' || existing?.subscriptionType === 'اشتراك شهر واحد') ? 'selected' : ''}>1 شهر</option>
+                    <option value="2 شهر" data-months="2" ${(existing?.subscriptionType === '2 شهر' || existing?.subscriptionType === 'اشتراك شهرين') ? 'selected' : ''}>2 شهر</option>
+                    <option value="3 شهر" data-months="3" ${(existing?.subscriptionType === '3 شهر' || existing?.subscriptionType === 'اشتراك 3 أشهر') ? 'selected' : ''}>3 شهر</option>
+                    <option value="6 شهر" data-months="6" ${(existing?.subscriptionType === '6 شهر' || existing?.subscriptionType === 'اشتراك 6 أشهر') ? 'selected' : ''}>6 شهر</option>
+                    <option value="1 سنة" data-months="12" ${(existing?.subscriptionType === '1 سنة' || existing?.subscriptionType === 'اشتراك سنة') ? 'selected' : ''}>1 سنة</option>
+                  </select>
                 </div>
               </div>
               <div class="form-row">
                 <div class="form-group">
-                  <label>تاريخ الاستحقاق *</label>
-                  <input type="date" id="sub-due" value="${existing?.dueDate || ''}">
+                  <label>تاريخ الانتهاء</label>
+                  <input type="date" id="sub-exp" value="${existing?.expiryDate || ''}">
                 </div>
                 <div class="form-group">
                   <label>حالة الدفع *</label>
@@ -1373,6 +1500,23 @@
       </div>
     `;
 
+    window.updateSubModalDates = function() {
+      const actInput = document.getElementById('sub-act');
+      const typeSelect = document.getElementById('sub-type');
+      const expInput = document.getElementById('sub-exp');
+      if (!actInput || !typeSelect || !expInput) return;
+      const startVal = actInput.value || today;
+      if (!actInput.value) actInput.value = startVal;
+      const months = Number(typeSelect.options[typeSelect.selectedIndex]?.dataset?.months) || 1;
+      if (window.addMonthsToDate) {
+        expInput.value = window.addMonthsToDate(startVal, months);
+      }
+    };
+
+    if (!existing?.expiryDate) {
+      window.updateSubModalDates();
+    }
+
     document.getElementById('subscriber-form').onsubmit = async (e) => {
       e.preventDefault();
       try {
@@ -1382,12 +1526,12 @@
         const deviceNumber = window.formatDeviceNumber ? window.formatDeviceNumber(rawDev) : rawDev;
         const owner = document.getElementById('sub-owner').value;
         const activationDate = document.getElementById('sub-act').value;
+        const subscriptionType = document.getElementById('sub-type').value;
         const expiryDate = document.getElementById('sub-exp').value;
-        const dueDate = document.getElementById('sub-due').value;
         const paymentStatus = document.getElementById('sub-payment').value;
 
         const subs = data.subscribers || [];
-        const status = (activationDate && expiryDate && activationDate <= today && today <= expiryDate) ? 'فعال' : 'غير فعال';
+        const status = (expiryDate && expiryDate >= today) ? 'فعال' : (existing?.status === 'فعال' ? 'فعال' : 'غير فعال');
 
         if (existing) {
           existing.name = name;
@@ -1395,10 +1539,15 @@
           existing.deviceNumber = deviceNumber;
           existing.owner = owner;
           existing.activationDate = activationDate;
+          existing.startDate = activationDate;
+          existing.subscriptionType = subscriptionType;
           existing.expiryDate = expiryDate;
-          existing.dueDate = dueDate;
+          existing.endDate = expiryDate;
+          existing.dueDate = expiryDate;
           existing.paymentStatus = paymentStatus;
+          existing.paymentMethod = paymentStatus === 'مدفوع' ? 'نقد' : 'دين';
           existing.status = status;
+          existing.activeStatus = status;
           if (!existing.joiningDate) {
             existing.joiningDate = activationDate || today;
           }
@@ -1407,8 +1556,14 @@
             id: 'sub-' + Date.now(),
             name, phone, deviceNumber, owner,
             joiningDate: activationDate || today,
-            activationDate, expiryDate, dueDate, status: 'غير فعال',
-            paymentStatus
+            activationDate, startDate: activationDate,
+            subscriptionType,
+            expiryDate, endDate: expiryDate,
+            dueDate: expiryDate,
+            status,
+            activeStatus: status,
+            paymentStatus,
+            paymentMethod: paymentStatus === 'مدفوع' ? 'نقد' : 'دين'
           });
         }
 
@@ -1771,6 +1926,7 @@
       'رقم الهاتف': s.phone,
       'رقم الجهاز': "'" + s.deviceNumber,
       'الجهة المالكة': s.owner,
+      'نوع الاشتراك': window.getSubscriberTypeLabel ? window.getSubscriberTypeLabel(s, data.sales) : (s.subscriptionType || '1 شهر'),
       'الحالة': s.status,
       'تاريخ التفعيل': s.activationDate,
       'تاريخ الانتهاء': s.expiryDate

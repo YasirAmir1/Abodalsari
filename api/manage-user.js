@@ -71,7 +71,8 @@ export default async function handler(req, res) {
   }
 
   // Verify caller is admin via userRoles collection
-  const db = admin.firestore();
+  const databaseId = process.env.FIRESTORE_DATABASE_ID || 'ai-studio-0c2caad1-c1ee-4aef-b0cc-d86c54f7310d';
+  const db = admin.firestore(databaseId);
   try {
     const callerDoc = await db.collection('userRoles').doc(decodedToken.uid).get();
     const callerData = callerDoc.data();
