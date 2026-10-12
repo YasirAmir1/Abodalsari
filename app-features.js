@@ -588,21 +588,19 @@
         '<td><span class="badge badge-neutral">' + escapeHtml(window.resolveAgentName ? window.resolveAgentName(s) : s.owner) + '</span></td>' +
 
         '<td style="text-align: center; white-space: nowrap;">' +
-          '<span class="badge" style="font-weight: 700; font-size: 0.82rem; background: rgba(59, 130, 246, 0.1); color: #2563eb; border: 1px solid rgba(59, 130, 246, 0.25); padding: 3px 9px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">' +
-            '📅 ' + escapeHtml(typeLabel) +
-          '</span>' +
+          (s.status === 'فعال' ? '<span class="badge" style="font-weight: 700; font-size: 0.82rem; background: rgba(59, 130, 246, 0.1); color: #2563eb; border: 1px solid rgba(59, 130, 246, 0.25); padding: 3px 9px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">📅 ' + escapeHtml(typeLabel) + '</span>' : '<span style="color: var(--muted); font-size: 0.8rem;">-</span>') +
         '</td>' +
-        '<td>' +
-          '<div class="cell-badges-group">' +
-            (s.status ? ('<span class="badge ' + (s.status === 'فعال' ? 'badge-success' : 'badge-danger') + '">' + escapeHtml(s.status) + '</span>') : '<span style="color: var(--muted); font-size: 0.8rem;">-</span>') +
-            (s.paymentStatus ? ('<span class="badge ' + (s.paymentStatus === 'مدفوع' ? 'badge-success' : ((s.paymentStatus === 'دين' || s.paymentStatus === 'غير مدفوع') ? 'badge-danger' : 'badge-neutral')) + '">' + escapeHtml(s.paymentStatus === 'غير مدفوع' ? 'دين' : s.paymentStatus) + '</span>') : '<span style="color: var(--muted); font-size: 0.8rem;">-</span>') +
-            ((s.status === 'غير فعال' && (s.paymentStatus === 'دين' || s.paymentStatus === 'غير مدفوع')) ? '<span title="تنبيه: غير منطقي (اشتراك غير فعال مع حالة دين/غير مدفوع)" style="font-size: 0.9rem; margin-right: 4px; cursor: help;">❓</span>' : '') +
-          '</div>' +
+        '<td style="text-align: center;">' +
+          (s.status === 'فعال' ? '<div class="cell-badges-group">' +
+            '<span class="badge badge-success">فعال</span>' +
+            (s.paymentStatus ? ('<span class="badge ' + (s.paymentStatus === 'مدفوع' ? 'badge-success' : ((s.paymentStatus === 'دين' || s.paymentStatus === 'غير مدفوع') ? 'badge-danger' : 'badge-neutral')) + '">' + escapeHtml(s.paymentStatus === 'غير مدفوع' ? 'دين' : s.paymentStatus) + '</span>') : '') +
+          '</div>' : '<span style="color: var(--muted); font-size: 0.8rem;">-</span>') +
         '</td>' +
         '<td style="text-align: center; white-space: nowrap;">' +
-          '<span style="font-weight: 800; font-size: 0.86rem; color: ' + amountColor + '; background: ' + amountBg + '; border: 1px solid ' + amountBorder + '; padding: 3px 9px; border-radius: 6px; display: inline-block; direction: ltr; font-family: monospace;">' +
-            formatNumber(amount) + ' د.ع' +
-          '</span>' +
+          (s.status === 'فعال' ? '<span style="font-weight: 800; font-size: 0.86rem; color: ' + amountColor + '; background: ' + amountBg + '; border: 1px solid ' + amountBorder + '; padding: 3px 9px; border-radius: 6px; display: inline-block; direction: ltr; font-family: monospace;">' + formatNumber(amount) + ' د.ع</span>' : '<span style="color: var(--muted); font-size: 0.8rem;">-</span>') +
+        '</td>' +
+        '<td style="text-align: center;">' +
+          (s.status === 'فعال' ? '<div class="cell-date-range" style="direction: ltr; font-size: 0.8rem;"><div class="cell-date-from">بدء: ' + escapeHtml(s.activationDate || s.startDate || '-') + '</div><div class="cell-date-to">انتهاء: ' + escapeHtml(s.expiryDate || s.endDate || '-') + '</div></div>' : '<span style="color: var(--muted); font-size: 0.8rem;">-</span>') +
         '</td>' +
         '<td style="text-align: center;">' +
           '<div class="action-btns" style="justify-content: center;">' +
@@ -962,6 +960,7 @@
                   <th style="text-align: center; cursor: pointer; user-select: none;" onclick="sortSubscribersBy('subscriptionType')" title="انقر للفرز حسب نوع الاشتراك">نوع الاشتراك ${subscriberSortBy.field === 'subscriptionType' ? (subscriberSortBy.direction === 'asc' ? '⬆️' : '⬇️') : '↕️'}</th>
                   <th>الحالة والدفع</th>
                   <th style="text-align: center; cursor: pointer; user-select: none;" onclick="sortSubscribersBy('price')" title="انقر للفرز حسب المبلغ">المبلغ ${subscriberSortBy.field === 'price' ? (subscriberSortBy.direction === 'asc' ? '⬆️' : '⬇️') : '↕️'}</th>
+                  <th style="text-align: center;">تاريخ البدء/الانتهاء</th>
                   <th style="text-align: center;">إجراءات</th>
                 </tr>
               </thead>
