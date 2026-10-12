@@ -1203,8 +1203,6 @@
                         <option value="1 شهر" data-months="1" ${(!sub.subscriptionType || sub.subscriptionType === '1 شهر' || sub.subscriptionType === 'اشتراك شهر واحد') ? 'selected' : ''}>1 شهر</option>
                         <option value="2 شهر" data-months="2" ${(sub.subscriptionType === '2 شهر' || sub.subscriptionType === 'اشتراك شهرين') ? 'selected' : ''}>2 شهر</option>
                         <option value="3 شهر" data-months="3" ${(sub.subscriptionType === '3 شهر' || sub.subscriptionType === 'اشتراك 3 أشهر') ? 'selected' : ''}>3 شهر</option>
-                        <option value="6 شهر" data-months="6" ${(sub.subscriptionType === '6 شهر' || sub.subscriptionType === 'اشتراك 6 أشهر') ? 'selected' : ''}>6 شهر</option>
-                        <option value="1 سنة" data-months="12" ${(sub.subscriptionType === '1 سنة' || sub.subscriptionType === 'اشتراك سنة') ? 'selected' : ''}>1 سنة</option>
                       </select>
                     </div>
                     <div class="form-group" style="margin: 0;">
@@ -1258,10 +1256,8 @@
       const group = window.getAgentPricing ? window.getAgentPricing(owner) : { sub1: 25000, sub2: 50000, sub3: 75000 };
       let price = group.sub1 || 25000;
       if (months === 1) price = group.sub1 || 25000;
-      else if (months === 2) price = group.sub2 || (price * 2);
-      else if (months === 3) price = group.sub3 || (price * 3);
-      else if (months === 6) price = group.sub6 || (price * 6);
-      else if (months === 12) price = group.sub12 || (price * 12);
+      else if (months === 2) price = group.sub2 || ((group.sub1 || 25000) * 2);
+      else if (months === 3) price = group.sub3 || ((group.sub1 || 25000) * 3);
       else price = (group.sub1 || 25000) * months;
 
       const priceInput = document.getElementById('asr-price');
@@ -1471,8 +1467,6 @@
                     <option value="1 شهر" data-months="1" ${(!existing?.subscriptionType || existing?.subscriptionType === '1 شهر' || existing?.subscriptionType === 'اشتراك شهر واحد') ? 'selected' : ''}>1 شهر</option>
                     <option value="2 شهر" data-months="2" ${(existing?.subscriptionType === '2 شهر' || existing?.subscriptionType === 'اشتراك شهرين') ? 'selected' : ''}>2 شهر</option>
                     <option value="3 شهر" data-months="3" ${(existing?.subscriptionType === '3 شهر' || existing?.subscriptionType === 'اشتراك 3 أشهر') ? 'selected' : ''}>3 شهر</option>
-                    <option value="6 شهر" data-months="6" ${(existing?.subscriptionType === '6 شهر' || existing?.subscriptionType === 'اشتراك 6 أشهر') ? 'selected' : ''}>6 شهر</option>
-                    <option value="1 سنة" data-months="12" ${(existing?.subscriptionType === '1 سنة' || existing?.subscriptionType === 'اشتراك سنة') ? 'selected' : ''}>1 سنة</option>
                   </select>
                 </div>
               </div>

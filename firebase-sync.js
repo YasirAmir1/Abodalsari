@@ -185,7 +185,10 @@ function isPurgedAgent(item) {
 }
 window.isPurgedAgent = isPurgedAgent;
 
-const DEFAULT_AGENTS = [];
+const DEFAULT_AGENTS = [
+  { id: 'ag-laith-j', name: 'ليث جاسم', code: 'LTH', phone: '07700000000', price: 45000, username: 'laith.ja', password: 'agent123' },
+  { id: 'ag-mahmod-f', name: 'محمود فجر', code: 'MHF', phone: '07700000000', price: 45000, username: 'mhmod.fjr', password: 'agent123' }
+];
 
 const DEFAULT_USERS = [
   {
@@ -1344,6 +1347,10 @@ class SariSyncEngine {
 
   // Completely delete a subscriber and all related records across system, localStorage and Firestore
   async deleteSubscriberCompletely(subscriberId, deviceNumberInput) {
+    if (!this.currentUser || this.currentUser.role !== 'admin') {
+      console.error('Unauthorized: Only admin can delete subscribers.');
+      return;
+    }
     if (!subscriberId && !deviceNumberInput) return;
 
     // 1. Identify target subscriber
@@ -1477,6 +1484,10 @@ class SariSyncEngine {
   // Delete a single item from local and Firestore with strict sync check
   async deleteItem(collectionName, itemId) {
     if (!itemId) return;
+    if (!this.currentUser || this.currentUser.role !== 'admin') {
+      console.error('Unauthorized: Only admin can delete items.');
+      return;
+    }
     // Strict immediate update of local in-memory state and localStorage
     this.data[collectionName] = (this.data[collectionName] || []).filter(item => {
       if (collectionName === 'users') {
@@ -1504,6 +1515,10 @@ class SariSyncEngine {
 
   // Completely wipe all core data from local and Firestore
   async clearAllData() {
+    if (!this.currentUser || this.currentUser.role !== 'admin') {
+      console.error('Unauthorized: Only admin can clear data.');
+      return;
+    }
     const collections = ['subscribers', 'sales', 'debts', 'agents', 'users', 'pricing', 'templates', 'agentSubmissions', 'codes', 'agentSettlements', 'products', 'agentTargets'];
     for (const col of collections) {
       await this.clearCollection(col);
@@ -1584,6 +1599,10 @@ class SariSyncEngine {
 
   // Delete notification from central Firestore and local cache
   async deleteNotification(notifId) {
+    if (!this.currentUser || this.currentUser.role !== 'admin') {
+      console.error('Unauthorized: Only admin can delete notifications.');
+      return;
+    }
     if (!notifId) return;
     this.data.notifications = (this.data.notifications || []).filter(n => n.id !== notifId);
     this.saveLocal();
