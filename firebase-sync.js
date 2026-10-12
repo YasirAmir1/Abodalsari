@@ -175,13 +175,12 @@ window.DEFAULT_WHATSAPP_TEMPLATE = DEFAULT_WHATSAPP_TEMPLATE;
 function isPurgedAgent(item) {
   if (!item) return false;
   const code = String(item.code || item.agentCode || '').trim().toUpperCase();
-  if (code === 'LTH' || code === 'MHF') return true;
+  // if (code === 'LTH' || code === 'MHF') return true;
   const username = String(item.username || '').trim().toLowerCase();
-  if (['laith.ja', 'mhmod.fjr', 'laith.j', 'mahmod.f', 'lth', 'mhf'].includes(username)) return true;
+  // if (['laith.j', 'mahmod.f'].includes(username)) return true;
   const id = String(item.id || item.uid || item.agentId || '').trim();
-  if (['ag-laith-j', 'ag-mahmod-f', 'u-agent-laith', 'u-agent-mahmod', 'laith.ja', 'mhmod.fjr', 'lth', 'mhf'].includes(id)) return true;
+  // if (['u-agent-laith', 'u-agent-mahmod'].includes(id)) return true;
   const name = String(item.name || item.displayName || item.agentName || '').trim();
-  if (name === 'ليث جاسم' || name === 'محمود فجر') return true;
   return false;
 }
 window.isPurgedAgent = isPurgedAgent;
