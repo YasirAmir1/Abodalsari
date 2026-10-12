@@ -256,7 +256,8 @@
     document.getElementById('single-code-form').onsubmit = async (e) => {
       e.preventDefault();
       const rawNum = document.getElementById('single-code-num').value;
-      const cleanNum = normalizeDigits(rawNum).replace(/\D/g, '');
+      const parsedNum = normalizeDigits(rawNum).replace(/\D/g, '');
+      const cleanNum = window.formatDeviceNumber ? window.formatDeviceNumber(parsedNum) : parsedNum;
       const subName = document.getElementById('single-code-sub').value.trim();
 
       if (cleanNum.length !== 16) {
@@ -695,7 +696,8 @@
           for (let r = 1; r < json.length; r++) {
             const row = json[r];
             if (!row || !row[codeIdx]) continue;
-            const cleanNum = normalizeDigits(String(row[codeIdx] || '')).replace(/\D/g, '');
+            const rawNum = normalizeDigits(String(row[codeIdx] || '')).replace(/\D/g, '');
+            const cleanNum = window.formatDeviceNumber ? window.formatDeviceNumber(rawNum) : rawNum;
             const subscriber = (subIdx !== -1 && row[subIdx]) ? String(row[subIdx]).trim() : '';
 
             if (cleanNum.length >= 10) {
@@ -787,7 +789,8 @@
               try {
                 const barcodes = await detector.detect(video);
                 if (barcodes.length > 0) {
-                  const val = normalizeDigits(barcodes[0].rawValue).replace(/\D/g, '');
+                  const rawVal = normalizeDigits(barcodes[0].rawValue).replace(/\D/g, '');
+                  const val = window.formatDeviceNumber ? window.formatDeviceNumber(rawVal) : rawVal;
                   if (val.length >= 10) {
                     closeScannerModal();
                     if (typeof onScanCallback === 'function') onScanCallback(val);
@@ -806,7 +809,8 @@
     usbInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        const val = normalizeDigits(usbInput.value).replace(/\D/g, '');
+        const rawVal = normalizeDigits(usbInput.value).replace(/\D/g, '');
+        const val = window.formatDeviceNumber ? window.formatDeviceNumber(rawVal) : rawVal;
         if (val) {
           closeScannerModal();
           if (typeof onScanCallback === 'function') onScanCallback(val);
@@ -815,7 +819,8 @@
     });
 
     document.getElementById('btn-manual-submit').onclick = () => {
-      const val = normalizeDigits(usbInput.value).replace(/\D/g, '');
+      const rawVal = normalizeDigits(usbInput.value).replace(/\D/g, '');
+      const val = window.formatDeviceNumber ? window.formatDeviceNumber(rawVal) : rawVal;
       if (val) {
         closeScannerModal();
         if (typeof onScanCallback === 'function') onScanCallback(val);

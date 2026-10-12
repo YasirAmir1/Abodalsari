@@ -230,9 +230,7 @@
                           ${d.paymentDate ? `<span class="cell-date-to" style="color: var(--success);">تسديد: ${escapeHtml(d.paymentDate)}</span>` : (d.remainingAmount === 0 ? `<span class="badge badge-success" style="font-size: 0.68rem; padding: 1px 4px; align-self: flex-start;">مسدد بالكامل</span>` : '')}
                         </div>
                       </td>
-                      <td>
-                        <small style="color: var(--text-sub); font-size: 0.75rem; max-width: 140px; display: inline-block; word-break: break-word;">${escapeHtml(d.notes || '-')}</small>
-                      </td>
+                      <td></td>
                       <td style="text-align: center;">
                         <div class="action-btns" style="justify-content: center;">
                           <button class="btn btn-primary btn-sm" onclick="openDebtPaymentModal('${d.id}')" style="padding: 3px 7px; font-size: 0.75rem;">تسجيل دفعة</button>
@@ -539,12 +537,9 @@
         '</td>' +
         '<td>' +
           '<div class="cell-badges-group">' +
-            '<span class="badge ' + (s.status === 'فعال' ? 'badge-success' : 'badge-danger') + '">' +
-              escapeHtml(s.status || 'غير فعال') +
-            '</span>' +
-            '<span class="badge ' + (s.paymentStatus === 'مدفوع' ? 'badge-success' : ((s.paymentStatus === 'دين' || s.paymentStatus === 'غير مدفوع') ? 'badge-danger' : 'badge-neutral')) + '">' +
-              escapeHtml(s.paymentStatus && s.paymentStatus !== '-' ? (s.paymentStatus === 'غير مدفوع' ? 'دين' : s.paymentStatus) : 'فارغ') +
-            '</span>' +
+            (s.status ? ('<span class="badge ' + (s.status === 'فعال' ? 'badge-success' : 'badge-danger') + '">' + escapeHtml(s.status) + '</span>') : '<span style="color: var(--muted); font-size: 0.8rem;">-</span>') +
+            (s.paymentStatus ? ('<span class="badge ' + (s.paymentStatus === 'مدفوع' ? 'badge-success' : ((s.paymentStatus === 'دين' || s.paymentStatus === 'غير مدفوع') ? 'badge-danger' : 'badge-neutral')) + '">' + escapeHtml(s.paymentStatus === 'غير مدفوع' ? 'دين' : s.paymentStatus) + '</span>') : '<span style="color: var(--muted); font-size: 0.8rem;">-</span>') +
+            ((s.status === 'غير فعال' && (s.paymentStatus === 'دين' || s.paymentStatus === 'غير مدفوع')) ? '<span title="تنبيه: غير منطقي (اشتراك غير فعال مع حالة دين/غير مدفوع)" style="font-size: 0.9rem; margin-right: 4px; cursor: help;">❓</span>' : '') +
           '</div>' +
         '</td>' +
         '<td style="text-align: center;">' +
@@ -576,13 +571,17 @@
       if (s.expiryDate && s.activationDate) {
         s.status = (s.activationDate <= today && today <= s.expiryDate) ? 'فعال' : 'غير فعال';
       } else {
-        s.status = 'غير فعال';
+        s.status = '';
       }
     });
 
-    // Helper to check if subscriber is paid
     function checkSubscriberPaid(s) {
-      if (!s.activationDate || !s.expiryDate) return '-';
+      if (!s.activationDate || !s.expiryDate || !s.status) {
+        return '';
+      }
+      if (s.status === 'غير فعال') {
+        return 'غير مدفوع';
+      }
       const hasDebt = debts.some(d => ((d.customerName && d.customerName.includes(s.name)) || (d.saleId && sales.find(sal => sal.id === d.saleId && sal.deviceNumber === s.deviceNumber))) && Number(d.remainingAmount) > 0);
       if (hasDebt) return 'دين';
       const subSales = sales.filter(sal => sal.deviceNumber === s.deviceNumber || sal.customerName === s.name);
@@ -591,7 +590,10 @@
         if (hasUnpaidSale) return 'دين';
         return 'مدفوع';
       }
-      return '-';
+      if (s.paymentStatus && (s.paymentStatus === 'مدفوع' || s.paymentStatus === 'دين' || s.paymentStatus === 'نقد')) {
+        return s.paymentStatus === 'نقد' ? 'مدفوع' : s.paymentStatus;
+      }
+      return 'مدفوع';
     }
 
     subs.forEach(s => {
@@ -1353,7 +1355,13 @@
                   <label>تاريخ الاستحقاق *</label>
                   <input type="date" id="sub-due" value="${existing?.dueDate || ''}">
                 </div>
-                <div class="form-group"></div>
+                <div class="form-group">
+                  <label>حالة الدفع *</label>
+                  <select id="sub-payment">
+                    <option value="مدفوع" ${!existing || existing.paymentStatus === 'مدفوع' || existing.paymentStatus === 'نقد' ? 'selected' : ''}>🟢 مدفوع (نقد)</option>
+                    <option value="دين" ${existing?.paymentStatus === 'دين' || existing?.paymentStatus === 'غير مدفوع' ? 'selected' : ''}>🔴 دين</option>
+                  </select>
+                </div>
               </div>
             </div>
             <div class="modal-footer">
@@ -1370,11 +1378,13 @@
       try {
         const name = document.getElementById('sub-name').value.trim();
         const phone = document.getElementById('sub-phone').value.trim();
-        const deviceNumber = document.getElementById('sub-device').value.trim();
+        const rawDev = document.getElementById('sub-device').value.trim();
+        const deviceNumber = window.formatDeviceNumber ? window.formatDeviceNumber(rawDev) : rawDev;
         const owner = document.getElementById('sub-owner').value;
         const activationDate = document.getElementById('sub-act').value;
         const expiryDate = document.getElementById('sub-exp').value;
         const dueDate = document.getElementById('sub-due').value;
+        const paymentStatus = document.getElementById('sub-payment').value;
 
         const subs = data.subscribers || [];
         const status = (activationDate && expiryDate && activationDate <= today && today <= expiryDate) ? 'فعال' : 'غير فعال';
@@ -1387,6 +1397,7 @@
           existing.activationDate = activationDate;
           existing.expiryDate = expiryDate;
           existing.dueDate = dueDate;
+          existing.paymentStatus = paymentStatus;
           existing.status = status;
           if (!existing.joiningDate) {
             existing.joiningDate = activationDate || today;
@@ -1396,7 +1407,8 @@
             id: 'sub-' + Date.now(),
             name, phone, deviceNumber, owner,
             joiningDate: activationDate || today,
-            activationDate, expiryDate, dueDate, status: 'غير فعال'
+            activationDate, expiryDate, dueDate, status: 'غير فعال',
+            paymentStatus
           });
         }
 
@@ -1634,7 +1646,8 @@
             const row = json[r];
             if (!row || !row[nameIdx]) continue;
             const name = String(row[nameIdx] || '').trim();
-            const device = normalizeDigits(String(row[devIdx] || '')).replace(/\s+/g, '');
+            const rawDev = normalizeDigits(String(row[devIdx] || '')).replace(/\s+/g, '');
+            const device = window.formatDeviceNumber ? window.formatDeviceNumber(rawDev) : rawDev;
             const phone = phoneIdx !== -1 ? String(row[phoneIdx] || '').trim() : '';
             const owner = ownerIdx !== -1 && row[ownerIdx] ? String(row[ownerIdx]).trim() : 'المركز الرئيسي';
 

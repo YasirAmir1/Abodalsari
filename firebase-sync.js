@@ -6,6 +6,112 @@
 
 const STORAGE_KEY = 'sari-app-v1';
 
+window.formatDeviceNumber = function(val) {
+  if (val === null || val === undefined || String(val).trim() === '' || String(val).trim() === '-') {
+    return '00';
+  }
+  let str = String(val).trim();
+  if (!str.startsWith('00')) {
+    str = '00' + str;
+  }
+  return str;
+};
+
+window.formatAllDeviceNumbers = function(dataObj) {
+  if (!dataObj) return dataObj;
+  let changed = false;
+
+  if (Array.isArray(dataObj.subscribers)) {
+    dataObj.subscribers.forEach(s => {
+      if (s.deviceNumber) {
+        const fmt = window.formatDeviceNumber(s.deviceNumber);
+        if (s.deviceNumber !== fmt) {
+          s.deviceNumber = fmt;
+          changed = true;
+        }
+      }
+    });
+  }
+  if (Array.isArray(dataObj.sales)) {
+    dataObj.sales.forEach(s => {
+      if (s.deviceNumber) {
+        const fmt = window.formatDeviceNumber(s.deviceNumber);
+        if (s.deviceNumber !== fmt) {
+          s.deviceNumber = fmt;
+          changed = true;
+        }
+      }
+    });
+  }
+  if (Array.isArray(dataObj.debts)) {
+    dataObj.debts.forEach(d => {
+      if (d.deviceNumber) {
+        const fmt = window.formatDeviceNumber(d.deviceNumber);
+        if (d.deviceNumber !== fmt) {
+          d.deviceNumber = fmt;
+          changed = true;
+        }
+      }
+    });
+  }
+  if (Array.isArray(dataObj.codes)) {
+    dataObj.codes.forEach(c => {
+      if (c.number) {
+        const fmt = window.formatDeviceNumber(c.number);
+        if (c.number !== fmt) {
+          c.number = fmt;
+          changed = true;
+        }
+      }
+      if (c.deviceNumber) {
+        const fmt = window.formatDeviceNumber(c.deviceNumber);
+        if (c.deviceNumber !== fmt) {
+          c.deviceNumber = fmt;
+          changed = true;
+        }
+      }
+    });
+  }
+  if (Array.isArray(dataObj.agentSubmissions)) {
+    dataObj.agentSubmissions.forEach(sub => {
+      if (sub.deviceNumber) {
+        const fmt = window.formatDeviceNumber(sub.deviceNumber);
+        if (sub.deviceNumber !== fmt) {
+          sub.deviceNumber = fmt;
+          changed = true;
+        }
+      }
+    });
+  }
+  if (Array.isArray(dataObj.agentSettlements)) {
+    dataObj.agentSettlements.forEach(st => {
+      if (st.deviceNumber) {
+        const fmt = window.formatDeviceNumber(st.deviceNumber);
+        if (st.deviceNumber !== fmt) {
+          st.deviceNumber = fmt;
+          changed = true;
+        }
+      }
+    });
+  }
+
+  if (changed && window.syncEngine && typeof window.syncEngine.saveLocal === 'function') {
+    setTimeout(() => {
+      try {
+        window.syncEngine.saveLocal(dataObj);
+        if (window.syncEngine.db && typeof window.syncEngine.commitData === 'function') {
+          if (Array.isArray(dataObj.subscribers)) window.syncEngine.commitData('subscribers', dataObj.subscribers);
+          if (Array.isArray(dataObj.sales)) window.syncEngine.commitData('sales', dataObj.sales);
+          if (Array.isArray(dataObj.codes)) window.syncEngine.commitData('codes', dataObj.codes);
+        }
+      } catch (e) {}
+    }, 500);
+  }
+
+  return dataObj;
+};
+
+
 // Initial demo seed data
 const DEFAULT_PRICING = {
   headquarters: {
@@ -378,7 +484,7 @@ class SariSyncEngine {
           pricing.agentPrices = newAgentPrices;
         }
 
-        return this.applyTombstoneFilter({
+        return window.formatAllDeviceNumbers(this.applyTombstoneFilter({
           agents: finalAgents,
           sales: cleanedSales,
           debts: cleanedDebts,
@@ -392,13 +498,13 @@ class SariSyncEngine {
           products: Array.isArray(parsed.products) && parsed.products.length > 0 ? parsed.products : DEFAULT_PRODUCTS,
           agentTargets: Array.isArray(parsed.agentTargets) ? parsed.agentTargets : [],
           notifications: Array.isArray(parsed.notifications) ? parsed.notifications : []
-        });
+        }));
       }
     } catch (e) {
       console.error('Failed reading localStorage', e);
     }
 
-    const initial = this.applyTombstoneFilter({
+    const initial = window.formatAllDeviceNumbers(this.applyTombstoneFilter({
       agents: DEFAULT_AGENTS,
       sales: DEFAULT_SALES,
       debts: DEFAULT_DEBTS,
@@ -412,7 +518,7 @@ class SariSyncEngine {
       products: DEFAULT_PRODUCTS,
       agentTargets: [],
       notifications: []
-    });
+    }));
     this.saveLocal(initial);
     return initial;
   }
@@ -995,6 +1101,8 @@ class SariSyncEngine {
           }
 
           const normalizedItem = { ...item, id: docId };
+          if (normalizedItem.deviceNumber) normalizedItem.deviceNumber = window.formatDeviceNumber(normalizedItem.deviceNumber);
+          if (normalizedItem.number && collectionName === 'codes') normalizedItem.number = window.formatDeviceNumber(normalizedItem.number);
 
           // Top-level collection write
           const topRef = this.db.collection(collectionName).doc(docId);
@@ -1080,6 +1188,8 @@ class SariSyncEngine {
           itemsList.forEach(item => {
             let docId = item.id || 'doc-' + Math.random().toString(36).substring(2, 9);
             const normalizedItem = { ...item, id: docId };
+            if (normalizedItem.deviceNumber) normalizedItem.deviceNumber = window.formatDeviceNumber(normalizedItem.deviceNumber);
+            if (normalizedItem.number && update.collectionName === 'codes') normalizedItem.number = window.formatDeviceNumber(normalizedItem.number);
             
             // Top-level collection write
             const topRef = this.db.collection(update.collectionName).doc(docId);

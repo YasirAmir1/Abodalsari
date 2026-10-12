@@ -2008,7 +2008,8 @@
         const seller = document.getElementById('sf-seller').value;
         const saleType = document.getElementById('sf-type').value;
         const isNewDevice = saleType === 'جهاز جديد';
-        const deviceNumber = document.getElementById('sf-device').value.trim();
+        const rawDev = document.getElementById('sf-device').value.trim();
+        const deviceNumber = window.formatDeviceNumber ? window.formatDeviceNumber(rawDev) : rawDev;
         const subscriptionType = isNewDevice ? 'جهاز جديد' : (document.getElementById('sf-sub')?.value || 'اشتراك شهر واحد');
         const startDate = isNewDevice ? today : (document.getElementById('sf-start')?.value || today);
         const endDate = isNewDevice ? '-' : (document.getElementById('sf-end')?.value || endDef);

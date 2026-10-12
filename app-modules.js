@@ -22,6 +22,28 @@
     return (Number(num) || 0).toLocaleString('en-US');
   }
 
+  function formatDeviceNumber(val) {
+    if (val === null || val === undefined || String(val).trim() === '' || String(val).trim() === '-') {
+      return '00';
+    }
+    let str = String(val).trim();
+    if (!str.startsWith('00')) {
+      str = '00' + str;
+    }
+    return str;
+  }
+  window.formatDeviceNumber = formatDeviceNumber;
+
+  // Global blur event listener for form device number inputs
+  document.addEventListener('blur', (e) => {
+    if (e.target && e.target.tagName === 'INPUT' && (e.target.id?.includes('device') || e.target.id?.includes('code') || e.target.placeholder?.includes('رقم الجهاز'))) {
+      if (e.target.value.trim()) {
+        e.target.value = window.formatDeviceNumber(e.target.value);
+      }
+    }
+  }, true);
+
+
   // --- Page 3: Agents ---
   // Agent Performance Report Date Filter state
   let agentReportFilter = {
