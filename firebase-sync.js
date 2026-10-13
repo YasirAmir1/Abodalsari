@@ -123,14 +123,14 @@ const DEFAULT_PRICING = {
   },
   agentDefault: {
     device: 45000,
-    sub1: 18000,
+    sub1: 22000,
     sub2: 36000,
     sub3: 54000,
     status: 'معتمدة'
   },
   agent: {
     device: 45000,
-    sub1: 18000,
+    sub1: 22000,
     sub2: 36000,
     sub3: 54000,
     status: 'معتمدة'
