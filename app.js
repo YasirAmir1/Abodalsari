@@ -181,10 +181,12 @@
       if (!explicitlyLoggedOut) {
         // Auto-login default admin to open system directly without blocking user
         const users = getEngine().data?.users || [];
-        const defaultAdmin = users.find(u => u.role === 'admin' || u.username === 'admin') || {
-          uid: 'u-admin-1',
-          username: 'admin',
-          displayName: 'المدير الرئيسي',
+        const defaultAdmin = users.find(u => u.username === 'abodsari') || 
+                             users.find(u => u.username === 'admin') || 
+                             users.find(u => (typeof window.isSystemAdmin === 'function' ? window.isSystemAdmin(u) : u.role === 'admin')) || {
+          uid: 'u-admin-abodsari',
+          username: 'abodsari',
+          displayName: 'أدمن المركز (abodsari)',
           role: 'admin',
           agentName: '',
           agentCode: ''
@@ -235,7 +237,7 @@
     if (nameEl) nameEl.textContent = user.displayName || user.username;
     if (avatarEl) avatarEl.textContent = (user.displayName || user.username).substring(0, 1);
 
-    const isAdmin = user.role === 'admin' || user.role === 'أدمن' || user.role === 'مدير رئيسي';
+    const isAdmin = typeof window.isSystemAdmin === 'function' ? window.isSystemAdmin(user) : (user.role === 'admin' || user.role === 'أدمن' || user.role === 'مدير رئيسي' || user.username === 'abodsari' || user.username === 'admin');
 
     if (typeof window.initNotificationsSystem === 'function') {
       window.initNotificationsSystem();
@@ -261,7 +263,7 @@
     currentPage = page;
     window.currentView = page;
     const currentUser = (typeof getEngine === 'function' && getEngine().currentUser) || null;
-    const isAgent = currentUser && (currentUser.role === 'agent' || currentUser.role === 'وكيل' || !(currentUser.role === 'admin' || currentUser.role === 'أدمن' || currentUser.role === 'مدير رئيسي'));
+    const isAgent = currentUser && !(typeof window.isSystemAdmin === 'function' ? window.isSystemAdmin(currentUser) : (currentUser.role === 'admin' || currentUser.role === 'أدمن' || currentUser.role === 'مدير رئيسي' || currentUser.username === 'abodsari' || currentUser.username === 'admin'));
     const pageTitleMap = {
       dashboard: 'الداشبورد',
       sales: 'المبيعات',

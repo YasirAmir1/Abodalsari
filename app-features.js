@@ -1423,7 +1423,9 @@
     const existing = subId ? (data.subscribers || []).find(s => s.id === subId) : null;
     const modalContainer = document.getElementById('modal-container');
     const today = new Date().toISOString().substring(0, 10);
-    const isAdmin = (typeof getEngine === 'function' && getEngine().currentUser && getEngine().currentUser.role === 'admin');
+    const isAdmin = typeof window.isSystemAdmin === 'function' 
+      ? window.isSystemAdmin(typeof getEngine === 'function' ? getEngine().currentUser : null)
+      : (getEngine()?.currentUser?.role === 'admin' || getEngine()?.currentUser?.username === 'abodsari');
 
     modalContainer.innerHTML = `
       <div class="modal-overlay active" onclick="if (event.target === this) window.closeModal()">

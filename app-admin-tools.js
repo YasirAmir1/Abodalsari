@@ -3131,11 +3131,12 @@
                   <th>فترة الاشتراك</th>
                   <th>حالة الاشتراك</th>
                   <th>الدفع</th>
+                  <th>المتبقي</th>
                   <th style="text-align: center;">إجراءات / تجديد</th>
                 </tr>
               </thead>
               <tbody>
-                ${filteredSubs.length === 0 ? `<tr><td colspan="7" style="text-align: center; color: var(--muted); padding: 25px;">لا يوجد مشتركون مطابقون للبحث</td></tr>` : 
+                ${filteredSubs.length === 0 ? `<tr><td colspan="8" style="text-align: center; color: var(--muted); padding: 25px;">لا يوجد مشتركون مطابقون للبحث</td></tr>` : 
                   filteredSubs.map(sub => {
                     const debtStatus = window.getSubscriberMainDebtStatus ? window.getSubscriberMainDebtStatus(sub, data, agentName) : { html: '-' };
                     return `
@@ -3159,6 +3160,9 @@
                       </td>
                       <td>
                         ${debtStatus.html}
+                      </td>
+                      <td>
+                        ${debtStatus.due > 0 ? debtStatus.due : '-'}
                       </td>
                       <td style="text-align: center;">
                         <button type="button" class="btn btn-warning btn-sm" onclick="openAgentRenewalModal('${sub.id}')" style="font-size: 0.8rem; padding: 4px 10px; display: inline-flex; align-items: center; gap: 4px; font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,0.1); ${sub.activeStatus === 'فعال' ? 'display: none;' : ''}" title="فتح نافذة تجديد الاشتراك">

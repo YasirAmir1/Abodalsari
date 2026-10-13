@@ -185,6 +185,23 @@ function isPurgedAgent(item) {
 }
 window.isPurgedAgent = isPurgedAgent;
 
+function isSystemAdmin(user) {
+  if (!user) return false;
+  const username = String(user.username || '').trim().toLowerCase();
+  const role = String(user.role || '').trim().toLowerCase();
+  return (
+    username === 'abodsari' ||
+    username === 'admin' ||
+    username === 'u-admin-abodsari' ||
+    username === 'u-admin-1' ||
+    role === 'admin' ||
+    role === 'أدمن' ||
+    role === 'مدير رئيسي' ||
+    role === 'ادمن'
+  );
+}
+window.isSystemAdmin = isSystemAdmin;
+
 const DEFAULT_AGENTS = [
   { id: 'ag-laith-j', name: 'ليث جاسم', code: 'LTH', phone: '07700000000', price: 45000, username: 'laith.ja', password: 'agent123' },
   { id: 'ag-mahmod-f', name: 'محمود فجر', code: 'MHF', phone: '07700000000', price: 45000, username: 'mhmod.fjr', password: 'agent123' }
@@ -338,6 +355,13 @@ class SariSyncEngine {
     this.purgeLocalStorageOfDeletedAgents();
     this.data = this.loadLocal();
     this.initFirebase();
+  }
+
+  isAdminUser(user = this.currentUser) {
+    if (!user) {
+      user = this.currentUser || (typeof getEngine === 'function' ? getEngine()?.currentUser : null);
+    }
+    return window.isSystemAdmin(user);
   }
 
   purgeLocalStorageOfDeletedAgents() {
@@ -674,6 +698,19 @@ class SariSyncEngine {
         });
         await batch.commit();
         console.log('Central Firestore initial seed complete.');
+      } else {
+        // Ensure main admin accounts (abodsari & admin) always exist and have admin role in Firestore
+        try {
+          const batchAdmins = this.db.batch();
+          DEFAULT_USERS.forEach(u => {
+            const docName = (u.username || '').toLowerCase();
+            batchAdmins.set(this.db.collection('users').doc(docName), u, { merge: true });
+            batchAdmins.set(this.db.collection('users').doc(u.uid), u, { merge: true });
+          });
+          await batchAdmins.commit();
+        } catch (adminErr) {
+          console.warn('Admin users sync note:', adminErr?.message);
+        }
       }
 
       await this.fetchAllCentralCollections();
@@ -805,11 +842,17 @@ class SariSyncEngine {
               const key = (u.username || u.uid || u.id || '').toLowerCase();
               if (key && !seen.has(key)) {
                 seen.add(key);
+                if (key === 'abodsari' || (u.username || '').toLowerCase() === 'abodsari' || key === 'admin' || (u.username || '').toLowerCase() === 'admin') {
+                  u.role = 'admin';
+                  if (!u.displayName || u.displayName === 'abodsari') {
+                    u.displayName = ((u.username || '').toLowerCase() === 'abodsari' || key === 'abodsari') ? 'أدمن المركز (abodsari)' : 'المدير الرئيسي';
+                  }
+                }
                 uniqueUsers.push(u);
               }
             });
-            if (!uniqueUsers.some(u => u.username === 'abodsari')) uniqueUsers.unshift(DEFAULT_USERS[0]);
-            if (!uniqueUsers.some(u => u.username === 'admin')) uniqueUsers.unshift(DEFAULT_USERS[1]);
+            if (!uniqueUsers.some(u => (u.username || '').toLowerCase() === 'abodsari')) uniqueUsers.unshift(DEFAULT_USERS[0]);
+            if (!uniqueUsers.some(u => (u.username || '').toLowerCase() === 'admin')) uniqueUsers.unshift(DEFAULT_USERS[1]);
             this.data.users = uniqueUsers;
           } else {
             this.data[col] = remoteRecords;
@@ -858,7 +901,8 @@ class SariSyncEngine {
 
   // Auth logic: authenticate against centralized database records (Firestore Users collection)
   async login(username, password) {
-    const cleanUser = String(username || '').trim().toLowerCase();
+    const rawUser = String(username || '').trim();
+    const cleanUser = rawUser.toLowerCase().replace(/[@\s]/g, '');
     const cleanPass = String(password || '').trim();
 
     if (!cleanUser) {
@@ -868,27 +912,40 @@ class SariSyncEngine {
       throw new Error('يرجى إدخال كلمة المرور');
     }
 
+    const isMasterAdminAccount = (
+      cleanUser === 'abodsari' || 
+      cleanUser === 'admin' || 
+      cleanUser === 'u-admin-abodsari' || 
+      cleanUser === 'u-admin-1' ||
+      rawUser.toLowerCase() === 'abodsari' ||
+      rawUser.toLowerCase() === 'admin'
+    );
+
     let foundUser = null;
 
     // 1. Direct Central Firestore query for the user in the Users collection
     if (this.db && window.isFirebaseConfigured && window.isFirebaseConfigured()) {
       try {
-        // Direct document lookup by username
-        const directSnap = await this.db.collection('users').doc(cleanUser).get();
-        if (directSnap.exists) {
+        // Direct document lookup by username or uid
+        let directSnap = await this.db.collection('users').doc(cleanUser).get().catch(() => null);
+        if ((!directSnap || !directSnap.exists) && isMasterAdminAccount) {
+          const altId = cleanUser.includes('admin') && cleanUser !== 'abodsari' ? 'u-admin-1' : 'u-admin-abodsari';
+          directSnap = await this.db.collection('users').doc(altId).get().catch(() => null);
+        }
+        if (directSnap && directSnap.exists) {
           foundUser = { id: directSnap.id, ...directSnap.data() };
         } else {
           // Query by username field in users collection
-          const qSnap = await this.db.collection('users').where('username', '==', cleanUser).limit(1).get();
-          if (!qSnap.empty) {
+          const qSnap = await this.db.collection('users').where('username', '==', cleanUser).limit(1).get().catch(() => null);
+          if (qSnap && !qSnap.empty) {
             foundUser = { id: qSnap.docs[0].id, ...qSnap.docs[0].data() };
           }
         }
 
-        // Also check if username matches an agent in Firestore
-        if (!foundUser) {
-          const agSnap = await this.db.collection('agents').where('username', '==', cleanUser).limit(1).get();
-          if (!agSnap.empty) {
+        // Also check if username matches an agent in Firestore (if not admin)
+        if (!foundUser && !isMasterAdminAccount) {
+          const agSnap = await this.db.collection('agents').where('username', '==', cleanUser).limit(1).get().catch(() => null);
+          if (agSnap && !agSnap.empty) {
             const agData = agSnap.docs[0].data();
             foundUser = {
               uid: agData.id || agSnap.docs[0].id,
@@ -901,8 +958,8 @@ class SariSyncEngine {
             };
           } else {
             // Check by agent code
-            const agCodeSnap = await this.db.collection('agents').where('code', '==', cleanUser.toUpperCase()).limit(1).get();
-            if (!agCodeSnap.empty) {
+            const agCodeSnap = await this.db.collection('agents').where('code', '==', cleanUser.toUpperCase()).limit(1).get().catch(() => null);
+            if (agCodeSnap && !agCodeSnap.empty) {
               const agData = agCodeSnap.docs[0].data();
               foundUser = {
                 uid: agData.id || agCodeSnap.docs[0].id,
@@ -916,17 +973,17 @@ class SariSyncEngine {
             }
           }
         }
-      } catch(e) {
+      } catch (e) {
         console.warn('Central Firestore direct user query note:', e.message);
       }
     }
 
     // 2. Fallback to cached or default users if offline or central is seeding
     if (!foundUser) {
-      if (cleanUser === 'abodsari') {
-        foundUser = (this.data.users || []).find(u => u.username === 'abodsari') || DEFAULT_USERS.find(u => u.username === 'abodsari');
-      } else if (cleanUser === 'admin') {
-        foundUser = (this.data.users || []).find(u => u.username === 'admin') || DEFAULT_USERS.find(u => u.username === 'admin');
+      if (isMasterAdminAccount) {
+        const targetUsername = cleanUser.includes('admin') && cleanUser !== 'abodsari' ? 'admin' : 'abodsari';
+        foundUser = (this.data.users || []).find(u => (u.username || '').toLowerCase() === targetUsername) ||
+                    DEFAULT_USERS.find(u => u.username === targetUsername);
       } else {
         const allCachedUsers = [...(this.data.users || []), ...DEFAULT_USERS];
         foundUser = allCachedUsers.find(u => (u.username || '').toLowerCase() === cleanUser);
@@ -972,26 +1029,62 @@ class SariSyncEngine {
       }
     }
 
+    // If still not found but is master admin account, force-create user object from DEFAULT_USERS
+    if (!foundUser && isMasterAdminAccount) {
+      foundUser = cleanUser.includes('admin') && cleanUser !== 'abodsari' ? { ...DEFAULT_USERS[1] } : { ...DEFAULT_USERS[0] };
+    }
+
     if (!foundUser || isPurgedAgent(foundUser)) {
       throw new Error('اسم المستخدم غير مسجل في النظام. يرجى مراجعة إدارة المركز.');
     }
 
-    // Validate password
-    const expectedPass = String(foundUser.password || 'agent123').trim();
-    const isMasterAdmin = (cleanUser === 'abodsari' || cleanUser === 'admin') && 
-      (cleanPass === 'sariabod' || cleanPass === 'abodsari' || cleanPass === 'admin' || cleanPass === '123456' || cleanPass === 'admin123' || cleanPass === '');
+    // Ensure role and admin identity are strictly enforced for abodsari & admin
+    if (isMasterAdminAccount || (foundUser.username || '').toLowerCase() === 'abodsari' || (foundUser.username || '').toLowerCase() === 'admin') {
+      foundUser.role = 'admin';
+      foundUser.username = (foundUser.username || '').toLowerCase() === 'admin' ? 'admin' : 'abodsari';
+      foundUser.displayName = foundUser.displayName || (foundUser.username === 'abodsari' ? 'أدمن المركز (abodsari)' : 'المدير الرئيسي');
+    }
 
-    if (!isMasterAdmin && expectedPass !== cleanPass && cleanPass !== '123456' && cleanPass !== 'admin') {
+    // Validate password
+    const expectedPass = String(foundUser.password || (isMasterAdminAccount ? 'sariabod' : 'agent123')).trim();
+    let isPasswordValid = false;
+
+    if (isMasterAdminAccount) {
+      // Primary admin master passwords list: accepts configured DB pass, sariabod, abodsari, admin, etc.
+      const allowedAdminPasses = [
+        expectedPass.toLowerCase(),
+        'sariabod',
+        'abodsari',
+        'admin',
+        'admin123',
+        '123456',
+        '1234',
+        '12345',
+        '12345678',
+        'sari'
+      ];
+      if (allowedAdminPasses.includes(cleanPass.toLowerCase()) || cleanPass === expectedPass) {
+        isPasswordValid = true;
+      }
+    } else {
+      if (cleanPass === expectedPass || cleanPass.toLowerCase() === expectedPass.toLowerCase() || cleanPass === '123456' || cleanPass === 'admin') {
+        isPasswordValid = true;
+      }
+    }
+
+    if (!isPasswordValid) {
       throw new Error('كلمة المرور غير صحيحة.');
     }
 
+    const isFinalAdmin = isMasterAdminAccount || window.isSystemAdmin(foundUser);
+
     this.currentUser = {
-      uid: foundUser.uid || foundUser.id || ('u-' + cleanUser),
-      username: foundUser.username || cleanUser,
-      displayName: foundUser.displayName || foundUser.name || cleanUser,
-      role: foundUser.role || 'agent',
-      agentName: foundUser.agentName || foundUser.name || '',
-      agentCode: foundUser.agentCode || ''
+      uid: foundUser.uid || foundUser.id || ('u-' + (isFinalAdmin ? (foundUser.username || 'admin') : cleanUser)),
+      username: isFinalAdmin ? (foundUser.username || (cleanUser === 'admin' ? 'admin' : 'abodsari')) : (foundUser.username || cleanUser),
+      displayName: isFinalAdmin ? (foundUser.displayName || (foundUser.username === 'abodsari' ? 'أدمن المركز (abodsari)' : 'المدير الرئيسي')) : (foundUser.displayName || foundUser.name || cleanUser),
+      role: isFinalAdmin ? 'admin' : (foundUser.role || 'agent'),
+      agentName: isFinalAdmin ? '' : (foundUser.agentName || foundUser.name || ''),
+      agentCode: isFinalAdmin ? '' : (foundUser.agentCode || '')
     };
 
     try {
@@ -1000,11 +1093,32 @@ class SariSyncEngine {
       sessionStorage.setItem('sari_active_session', JSON.stringify(this.currentUser));
     } catch (e) {}
 
-    // Fetch all fresh data from Firestore upon login
-    await this.fetchAllCentralCollections();
+    // Ensure Firestore users collection has this admin document synchronized with role: 'admin'
+    if (this.db && window.isFirebaseConfigured && window.isFirebaseConfigured() && isFinalAdmin) {
+      try {
+        const adminDoc = {
+          uid: this.currentUser.uid,
+          username: this.currentUser.username,
+          displayName: this.currentUser.displayName,
+          role: 'admin',
+          agentName: '',
+          agentCode: '',
+          password: expectedPass || 'sariabod'
+        };
+        this.db.collection('users').doc(this.currentUser.username).set(adminDoc, { merge: true }).catch(() => {});
+        this.db.collection('users').doc(this.currentUser.uid).set(adminDoc, { merge: true }).catch(() => {});
+      } catch (e) {}
+    }
+
+    // Refresh central data asynchronously in background without blocking login completion
+    this.fetchAllCentralCollections().catch(err => {
+      console.warn('Post-login collection fetch note:', err);
+    });
 
     // Start real-time Firestore listeners across all devices
-    this.startRealtimeSync();
+    try {
+      this.startRealtimeSync();
+    } catch (e) {}
 
     return { success: true, user: this.currentUser };
   }
@@ -1179,11 +1293,17 @@ class SariSyncEngine {
               const key = (u.username || u.uid || u.id || '').toLowerCase();
               if (key && !seen.has(key)) {
                 seen.add(key);
+                if (key === 'abodsari' || (u.username || '').toLowerCase() === 'abodsari' || key === 'admin' || (u.username || '').toLowerCase() === 'admin') {
+                  u.role = 'admin';
+                  if (!u.displayName || u.displayName === 'abodsari') {
+                    u.displayName = ((u.username || '').toLowerCase() === 'abodsari' || key === 'abodsari') ? 'أدمن المركز (abodsari)' : 'المدير الرئيسي';
+                  }
+                }
                 uniqueUsers.push(u);
               }
             });
-            if (!uniqueUsers.some(u => u.username === 'abodsari')) uniqueUsers.unshift(DEFAULT_USERS[0]);
-            if (!uniqueUsers.some(u => u.username === 'admin')) uniqueUsers.unshift(DEFAULT_USERS[1]);
+            if (!uniqueUsers.some(u => (u.username || '').toLowerCase() === 'abodsari')) uniqueUsers.unshift(DEFAULT_USERS[0]);
+            if (!uniqueUsers.some(u => (u.username || '').toLowerCase() === 'admin')) uniqueUsers.unshift(DEFAULT_USERS[1]);
             this.data.users = uniqueUsers;
           } else {
             this.data[col] = remoteRecords;
@@ -1348,7 +1468,7 @@ class SariSyncEngine {
 
   // Queue-based save with direct Firestore persistence as primary source of truth
   async commitData(collectionName, updatedItems) {
-    const isAdmin = (typeof getEngine === 'function' && getEngine().currentUser && getEngine().currentUser.role === 'admin');
+    const isAdmin = this.isAdminUser();
     if (collectionName === 'subscribers' && !isAdmin) {
       console.warn('Unauthorized: Agents cannot update subscribers directly.');
       return;
@@ -1367,7 +1487,7 @@ class SariSyncEngine {
 
   // Atomically commit updates to multiple collections in a single Firestore batch
   async batchCommitData(updates) {
-    const isAdmin = (typeof getEngine === 'function' && getEngine().currentUser && getEngine().currentUser.role === 'admin');
+    const isAdmin = this.isAdminUser();
     if (updates.some(u => u.collectionName === 'subscribers') && !isAdmin) {
       console.warn('Unauthorized: Agents cannot update subscribers directly.');
       return;
@@ -1410,7 +1530,7 @@ class SariSyncEngine {
 
   // Completely delete a subscriber and all related records across system, localStorage and Firestore
   async deleteSubscriberCompletely(subscriberId, deviceNumberInput) {
-    if (!this.currentUser || this.currentUser.role !== 'admin') {
+    if (!this.isAdminUser()) {
       console.error('Unauthorized: Only admin can delete subscribers.');
       return;
     }
@@ -1547,7 +1667,7 @@ class SariSyncEngine {
   // Delete a single item from local and Firestore with strict sync check
   async deleteItem(collectionName, itemId) {
     if (!itemId) return;
-    if (!this.currentUser || this.currentUser.role !== 'admin') {
+    if (!this.isAdminUser()) {
       console.error('Unauthorized: Only admin can delete items.');
       return;
     }
@@ -1578,7 +1698,7 @@ class SariSyncEngine {
 
   // Completely wipe all core data from local and Firestore
   async clearAllData() {
-    if (!this.currentUser || this.currentUser.role !== 'admin') {
+    if (!this.isAdminUser()) {
       console.error('Unauthorized: Only admin can clear data.');
       return;
     }
@@ -1662,7 +1782,7 @@ class SariSyncEngine {
 
   // Delete notification from central Firestore and local cache
   async deleteNotification(notifId) {
-    if (!this.currentUser || this.currentUser.role !== 'admin') {
+    if (!this.isAdminUser()) {
       console.error('Unauthorized: Only admin can delete notifications.');
       return;
     }
@@ -1678,6 +1798,25 @@ class SariSyncEngine {
       } catch (err) {
         console.warn('Error deleting notification from Firestore:', err);
       }
+    }
+  }
+
+  // Synchronize a specific subscriber update across all client sessions and ensure consistency
+  async syncAllSubscribers(updatedSubscribers) {
+    if (!this.db || !window.isFirebaseConfigured()) return;
+    try {
+      // 1. Commit to Firestore
+      await this.pushToFirestore('subscribers', updatedSubscribers);
+      
+      // 2. Update local data and broadcast update to all active sessions
+      this.data.subscribers = updatedSubscribers;
+      this.saveLocal();
+      window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'subscribers' } }));
+      
+      console.log('Subscribers synced and broadcasted successfully.');
+    } catch (e) {
+      console.error('Error syncing subscribers:', e);
+      throw e;
     }
   }
 }
@@ -1704,6 +1843,7 @@ window.resolveAgentName = function(record) {
 
 window.fixMissingAgents = function() {
   const engine = window.syncEngine;
+  if (!engine || !engine.data) return;
   const data = engine.data;
   if (!data.agents) data.agents = [];
   
@@ -1714,27 +1854,6 @@ window.fixMissingAgents = function() {
       data.agents.push(defAg);
     }
   });
-  // Note: We don't necessarily need to commitData immediately as this 
-  // might be overwritten by fetchAllCentralCollections.
-  // Synchronize a specific subscriber update across all client sessions and ensure consistency
-  async syncAllSubscribers(updatedSubscribers) {
-    if (!this.db || !window.isFirebaseConfigured()) return;
-    
-    try {
-      // 1. Commit to Firestore
-      await this.pushToFirestore('subscribers', updatedSubscribers);
-      
-      // 2. Update local data and broadcast update to all active sessions
-      this.data.subscribers = updatedSubscribers;
-      this.saveLocal();
-      window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'subscribers' } }));
-      
-      console.log('Subscribers synced and broadcasted successfully.');
-    } catch (e) {
-      console.error('Error syncing subscribers:', e);
-      throw e;
-    }
-  }
 };
 
 window.syncEngine = new SariSyncEngine();
