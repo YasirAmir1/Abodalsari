@@ -17,9 +17,43 @@ window.formatDeviceNumber = function(val) {
   return str;
 };
 
+window.getSubscriberActiveStatus = function(s, today) {
+  if (!today) today = new Date().toISOString().substring(0, 10);
+  if (!s) return 'غير فعال';
+
+  // 1. Expiry date check: if expiry date is today or in the future, subscriber is active ('فعال')
+  const exp = s.expiryDate || s.endDate || s.dueDate;
+  if (exp && String(exp).trim() !== '-' && String(exp).trim() !== '') {
+    if (String(exp).trim() >= today) {
+      return 'فعال';
+    } else {
+      return 'غير فعال';
+    }
+  }
+
+  // 2. Direct status from Headquarters record
+  if (s.status === 'فعال' || s.activeStatus === 'فعال' || s.isActivated === true) {
+    return 'فعال';
+  }
+
+  return s.status || s.activeStatus || 'غير فعال';
+};
+
+window.getSubscriberPaymentStatus = function(s) {
+  if (!s) return '';
+  if (s.paymentStatus === 'مدفوع' || s.paymentStatus === 'نقد' || s.paymentStatus === 'تم التسديد' || s.paymentMethod === 'نقد') {
+    return 'مدفوع';
+  }
+  if (s.paymentStatus === 'دين' || s.paymentStatus === 'غير مدفوع' || s.paymentMethod === 'دين') {
+    return 'دين';
+  }
+  return s.paymentStatus || '';
+};
+
 window.formatAllDeviceNumbers = function(dataObj) {
   if (!dataObj) return dataObj;
   let changed = false;
+  const today = new Date().toISOString().substring(0, 10);
 
   if (Array.isArray(dataObj.subscribers)) {
     dataObj.subscribers.forEach(s => {
@@ -29,6 +63,13 @@ window.formatAllDeviceNumbers = function(dataObj) {
           s.deviceNumber = fmt;
           changed = true;
         }
+      }
+      // Harmonize status between Headquarters and Agents
+      const activeStatus = window.getSubscriberActiveStatus(s, today);
+      if (s.status !== activeStatus || s.activeStatus !== activeStatus) {
+        s.status = activeStatus;
+        s.activeStatus = activeStatus;
+        changed = true;
       }
     });
   }
@@ -854,6 +895,14 @@ class SariSyncEngine {
             if (!uniqueUsers.some(u => (u.username || '').toLowerCase() === 'abodsari')) uniqueUsers.unshift(DEFAULT_USERS[0]);
             if (!uniqueUsers.some(u => (u.username || '').toLowerCase() === 'admin')) uniqueUsers.unshift(DEFAULT_USERS[1]);
             this.data.users = uniqueUsers;
+          } else if (col === 'subscribers') {
+            const today = new Date().toISOString().substring(0, 10);
+            remoteRecords.forEach(s => {
+              const act = window.getSubscriberActiveStatus ? window.getSubscriberActiveStatus(s, today) : (s.status || 'فعال');
+              s.status = act;
+              s.activeStatus = act;
+            });
+            this.data.subscribers = remoteRecords;
           } else {
             this.data[col] = remoteRecords;
           }
@@ -883,7 +932,13 @@ class SariSyncEngine {
       const snap = await this.db.collection('subscribers').get();
       if (!snap.empty) {
         const freshSubscribers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        
+        const today = new Date().toISOString().substring(0, 10);
+        freshSubscribers.forEach(s => {
+          const act = window.getSubscriberActiveStatus ? window.getSubscriberActiveStatus(s, today) : (s.status || 'فعال');
+          s.status = act;
+          s.activeStatus = act;
+        });
+
         // 2. Update local data
         this.data.subscribers = freshSubscribers;
         this.saveLocal();
@@ -1305,6 +1360,14 @@ class SariSyncEngine {
             if (!uniqueUsers.some(u => (u.username || '').toLowerCase() === 'abodsari')) uniqueUsers.unshift(DEFAULT_USERS[0]);
             if (!uniqueUsers.some(u => (u.username || '').toLowerCase() === 'admin')) uniqueUsers.unshift(DEFAULT_USERS[1]);
             this.data.users = uniqueUsers;
+          } else if (col === 'subscribers') {
+            const today = new Date().toISOString().substring(0, 10);
+            remoteRecords.forEach(s => {
+              const act = window.getSubscriberActiveStatus ? window.getSubscriberActiveStatus(s, today) : (s.status || 'فعال');
+              s.status = act;
+              s.activeStatus = act;
+            });
+            this.data.subscribers = remoteRecords;
           } else {
             this.data[col] = remoteRecords;
           }

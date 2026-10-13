@@ -2723,25 +2723,18 @@
     });
     const unpaidSalesDue = unpaidSales.reduce((sum, sal) => sum + ((Number(sal.price) || 0) - (Number(sal.agentPaid) || 0)), 0);
 
-    // For new subscribers who have no sales and no debts yet:
-    // Leave "تم التسديد للرئيسية" empty until the agent or admin renews their subscription.
-    if (matchedDebts.length === 0 && matchedSales.length === 0) {
-      return {
-        status: 'فارغ',
-        isPaid: false,
-        due: 0,
-        paid: 0,
-        html: `<span style="color: var(--muted); font-size: 0.85rem; font-weight: 500;">-</span>`
-      };
-    }
+    // 1. Direct payment status check on subscriber record from Headquarters
+    const isDirectDebt = s.paymentStatus === 'دين' || s.paymentStatus === 'غير مدفوع' || s.paymentMethod === 'دين';
+    const isDirectCash = s.paymentStatus === 'مدفوع' || s.paymentStatus === 'نقد' || s.paymentStatus === 'تم التسديد' || s.paymentMethod === 'نقد';
 
-    // If there is any unpaid/debt amount (overdue or credit renewal):
+    // If there is any unpaid/debt amount (overdue or credit renewal) or explicitly marked as debt by Headquarters:
     const overallDue = (Number(totalRemaining) > 0) ? Number(totalRemaining) : (Number(unpaidSalesDue) || 0);
-    if (overallDue > 0) {
+    if (overallDue > 0 || isDirectDebt) {
+      const displayAmount = overallDue > 0 ? formatIQD(overallDue) : (s.price ? formatIQD(s.price) : 'دين');
       return {
         status: 'مطلوب للرئيسية',
         isPaid: false,
-        due: overallDue,
+        due: overallDue || Number(s.price) || 0,
         paid: totalPaid,
         html: `
           <div style="display: flex; flex-direction: column; gap: 3px;">
@@ -2749,7 +2742,7 @@
               <span>⏳</span> <span>مطلوب للرئيسية (دين)</span>
             </span>
             <span style="font-weight: 800; color: var(--danger); font-size: 0.84rem; font-family: monospace;">
-              ${formatIQD(overallDue)}
+              ${displayAmount}
             </span>
             ${totalPaid > 0 ? `<span style="font-size: 0.72rem; color: var(--muted);">(مسدد: ${formatNumber(totalPaid)})</span>` : ''}
           </div>
@@ -2757,21 +2750,32 @@
       };
     }
 
-    // When subscription is renewed in cash or fully settled:
-    const paidSum = totalPaid > 0 ? totalPaid : (matchedSales[0]?.price || 0);
+    // When subscription is renewed in cash, fully settled, or marked as paid by Headquarters:
+    if (isDirectCash || (matchedSales.length > 0 && overallDue === 0)) {
+      const paidSum = totalPaid > 0 ? totalPaid : (matchedSales[0]?.price || s.price || 0);
+      return {
+        status: 'تم التسديد للرئيسية',
+        isPaid: true,
+        due: 0,
+        paid: paidSum,
+        html: `
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            <span class="badge badge-success" style="display: inline-flex; align-items: center; gap: 4px; font-weight: 700; width: fit-content;">
+              <span>✅</span> <span>تم التسديد للرئيسية (نقد)</span>
+            </span>
+            ${paidSum > 0 ? `<span style="font-size: 0.74rem; color: var(--success); font-weight: 600;">(سُدد: ${formatNumber(paidSum)} د.ع)</span>` : ''}
+          </div>
+        `
+      };
+    }
+
+    // For subscribers with no specific payment/sales/debt info yet:
     return {
-      status: 'تم التسديد للرئيسية',
-      isPaid: true,
+      status: 'فارغ',
+      isPaid: false,
       due: 0,
-      paid: paidSum,
-      html: `
-        <div style="display: flex; flex-direction: column; gap: 2px;">
-          <span class="badge badge-success" style="display: inline-flex; align-items: center; gap: 4px; font-weight: 700; width: fit-content;">
-            <span>✅</span> <span>تم التسديد للرئيسية (نقد)</span>
-          </span>
-          ${paidSum > 0 ? `<span style="font-size: 0.74rem; color: var(--success); font-weight: 600;">(سُدد: ${formatNumber(paidSum)} د.ع)</span>` : ''}
-        </div>
-      `
+      paid: 0,
+      html: `<span style="color: var(--muted); font-size: 0.85rem; font-weight: 500;">-</span>`
     };
   };
 
@@ -2785,12 +2789,20 @@
     const allMySales = (data.sales || []).filter(s => s.seller === agentName || s.agentName === agentName);
     const myDebts = (data.debts || []).filter(d => (d.seller === agentName || (d.customerName && d.customerName.includes(agentName))) && d.remainingAmount > 0);
     const mySubmissions = (data.agentSubmissions || []).filter(s => s.seller === agentName || s.agentName === agentName || s.submittedBy === user.uid);
-    const allMySubscribers = (data.subscribers || []).filter(s => s.owner === agentName || s.owner === user.displayName || s.owner === user.agentCode);
+    const allMySubscribers = (data.subscribers || []).filter(s => 
+      s.owner === agentName || 
+      s.owner === user.displayName || 
+      s.owner === user.agentCode ||
+      s.agentName === agentName ||
+      s.seller === agentName ||
+      (user.agentCode && s.owner && s.owner.includes(user.agentCode))
+    );
 
     // Apply agent filters
     let filteredSales = allMySales.map(s => {
-      const isActive = s.endDate && s.endDate >= today;
-      return { ...s, activeStatus: isActive ? 'فعال' : 'غير فعال' };
+      const isActive = (s.endDate && s.endDate >= today) || s.status === 'فعال' || s.activeStatus === 'فعال';
+      const activeStatus = isActive ? 'فعال' : 'غير فعال';
+      return { ...s, activeStatus: activeStatus, status: activeStatus };
     });
 
     if (agentFilter.status !== 'all') {
@@ -2815,10 +2827,10 @@
       });
     }
 
-    // Filter subscribers
+    // Filter subscribers - strictly identical to Headquarters status logic
     let filteredSubs = allMySubscribers.map(s => {
-      const isActive = s.expiryDate && s.activationDate && s.activationDate <= today && today <= s.expiryDate;
-      return { ...s, activeStatus: isActive ? 'فعال' : 'غير فعال' };
+      const activeStatus = window.getSubscriberActiveStatus ? window.getSubscriberActiveStatus(s, today) : (s.status || (s.expiryDate && s.expiryDate >= today ? 'فعال' : 'غير فعال'));
+      return { ...s, activeStatus: activeStatus, status: activeStatus };
     });
     if (agentFilter.status !== 'all') {
       filteredSubs = filteredSubs.filter(s => s.activeStatus === agentFilter.status);
@@ -3131,12 +3143,11 @@
                   <th>فترة الاشتراك</th>
                   <th>حالة الاشتراك</th>
                   <th>الدفع</th>
-                  <th>المتبقي</th>
                   <th style="text-align: center;">إجراءات / تجديد</th>
                 </tr>
               </thead>
               <tbody>
-                ${filteredSubs.length === 0 ? `<tr><td colspan="8" style="text-align: center; color: var(--muted); padding: 25px;">لا يوجد مشتركون مطابقون للبحث</td></tr>` : 
+                ${filteredSubs.length === 0 ? `<tr><td colspan="7" style="text-align: center; color: var(--muted); padding: 25px;">لا يوجد مشتركون مطابقون للبحث</td></tr>` : 
                   filteredSubs.map(sub => {
                     const debtStatus = window.getSubscriberMainDebtStatus ? window.getSubscriberMainDebtStatus(sub, data, agentName) : { html: '-' };
                     return `
@@ -3160,9 +3171,6 @@
                       </td>
                       <td>
                         ${debtStatus.html}
-                      </td>
-                      <td>
-                        ${debtStatus.due > 0 ? debtStatus.due : '-'}
                       </td>
                       <td style="text-align: center;">
                         <button type="button" class="btn btn-warning btn-sm" onclick="openAgentRenewalModal('${sub.id}')" style="font-size: 0.8rem; padding: 4px 10px; display: inline-flex; align-items: center; gap: 4px; font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,0.1); ${sub.activeStatus === 'فعال' ? 'display: none;' : ''}" title="فتح نافذة تجديد الاشتراك">

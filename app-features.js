@@ -626,20 +626,10 @@
     const today = new Date().toISOString().substring(0, 10);
     const todayTime = new Date(today).getTime();
 
-    // Dynamic status check
+    // Dynamic status check - identical across Headquarters and Agents
     subs.forEach(s => {
-      if (s.expiryDate) {
-        // If expiryDate is today or future, subscriber is active ('فعال')
-        if (s.expiryDate >= today) {
-          s.status = 'فعال';
-        } else {
-          s.status = 'غير فعال';
-        }
-      } else if (s.status) {
-        // Keep status if already set (e.g. 'فعال')
-      } else {
-        s.status = 'غير فعال';
-      }
+      s.status = typeof window.getSubscriberActiveStatus === 'function' ? window.getSubscriberActiveStatus(s, today) : ((s.expiryDate && s.expiryDate >= today) || s.status === 'فعال' ? 'فعال' : 'غير فعال');
+      s.activeStatus = s.status;
     });
 
     function checkSubscriberPaid(s) {
