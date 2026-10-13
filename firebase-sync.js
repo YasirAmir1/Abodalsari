@@ -761,6 +761,15 @@ class SariSyncEngine {
     }
   }
 
+  // Force manual refresh of all collections from Firestore
+  async forceSync() {
+    console.log('Forcing sync from Firestore...');
+    await this.fetchAllCentralCollections();
+    this.saveLocal();
+    window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'all' } }));
+    console.log('Force sync complete.');
+  }
+
   // Fetch all collections dynamically from central Firestore to keep all devices up-to-date
   async fetchAllCentralCollections() {
     if (!this.db || !window.isFirebaseConfigured || !window.isFirebaseConfigured()) return;
@@ -821,6 +830,30 @@ class SariSyncEngine {
   // Fetch latest credentials and profiles directly from Central Firestore
   async fetchCentralCredentials() {
     await this.fetchAllCentralCollections();
+  }
+
+  // Comprehensive Sync: Forces update of all subscribers from the Central database
+  async performComprehensiveSync() {
+    console.log('Starting comprehensive synchronization of subscribers...');
+    try {
+      // 1. Fetch fresh data specifically for subscribers from Central Firestore
+      const snap = await this.db.collection('subscribers').get();
+      if (!snap.empty) {
+        const freshSubscribers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        
+        // 2. Update local data
+        this.data.subscribers = freshSubscribers;
+        this.saveLocal();
+        
+        // 3. Notify app of the update
+        window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'subscribers' } }));
+        console.log('Comprehensive sync successful: ', freshSubscribers.length, 'subscribers updated.');
+      } else {
+        console.warn('No subscribers found in central database during comprehensive sync.');
+      }
+    } catch (e) {
+      console.error('Error during comprehensive sync:', e);
+    }
   }
 
   // Auth logic: authenticate against centralized database records (Firestore Users collection)
@@ -1315,6 +1348,11 @@ class SariSyncEngine {
 
   // Queue-based save with direct Firestore persistence as primary source of truth
   async commitData(collectionName, updatedItems) {
+    const isAdmin = (typeof getEngine === 'function' && getEngine().currentUser && getEngine().currentUser.role === 'admin');
+    if (collectionName === 'subscribers' && !isAdmin) {
+      console.warn('Unauthorized: Agents cannot update subscribers directly.');
+      return;
+    }
     if (this.db && window.isFirebaseConfigured()) {
       try {
         await this.pushToFirestore(collectionName, updatedItems);
@@ -1329,6 +1367,11 @@ class SariSyncEngine {
 
   // Atomically commit updates to multiple collections in a single Firestore batch
   async batchCommitData(updates) {
+    const isAdmin = (typeof getEngine === 'function' && getEngine().currentUser && getEngine().currentUser.role === 'admin');
+    if (updates.some(u => u.collectionName === 'subscribers') && !isAdmin) {
+      console.warn('Unauthorized: Agents cannot update subscribers directly.');
+      return;
+    }
     if (this.db && window.isFirebaseConfigured()) {
       try {
         const batch = this.db.batch();
@@ -1673,7 +1716,25 @@ window.fixMissingAgents = function() {
   });
   // Note: We don't necessarily need to commitData immediately as this 
   // might be overwritten by fetchAllCentralCollections.
-  // Instead, ensure the UI has access to these defaults if they are missing.
+  // Synchronize a specific subscriber update across all client sessions and ensure consistency
+  async syncAllSubscribers(updatedSubscribers) {
+    if (!this.db || !window.isFirebaseConfigured()) return;
+    
+    try {
+      // 1. Commit to Firestore
+      await this.pushToFirestore('subscribers', updatedSubscribers);
+      
+      // 2. Update local data and broadcast update to all active sessions
+      this.data.subscribers = updatedSubscribers;
+      this.saveLocal();
+      window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'subscribers' } }));
+      
+      console.log('Subscribers synced and broadcasted successfully.');
+    } catch (e) {
+      console.error('Error syncing subscribers:', e);
+      throw e;
+    }
+  }
 };
 
 window.syncEngine = new SariSyncEngine();

@@ -1423,6 +1423,7 @@
     const existing = subId ? (data.subscribers || []).find(s => s.id === subId) : null;
     const modalContainer = document.getElementById('modal-container');
     const today = new Date().toISOString().substring(0, 10);
+    const isAdmin = (typeof getEngine === 'function' && getEngine().currentUser && getEngine().currentUser.role === 'admin');
 
     modalContainer.innerHTML = `
       <div class="modal-overlay active" onclick="if (event.target === this) window.closeModal()">
@@ -1459,11 +1460,11 @@
               <div class="form-row">
                 <div class="form-group">
                   <label>تاريخ التفعيل</label>
-                  <input type="date" id="sub-act" value="${existing?.activationDate || today}" onchange="updateSubModalDates()">
+                  <input type="date" id="sub-act" ${isAdmin ? '' : 'disabled'} value="${existing?.activationDate || today}" onchange="updateSubModalDates()">
                 </div>
                 <div class="form-group">
                   <label>نوع الاشتراك *</label>
-                  <select id="sub-type" onchange="updateSubModalDates()">
+                  <select id="sub-type" ${isAdmin ? '' : 'disabled'} onchange="updateSubModalDates()">
                     <option value="1 شهر" data-months="1" ${(!existing?.subscriptionType || existing?.subscriptionType === '1 شهر' || existing?.subscriptionType === 'اشتراك شهر واحد') ? 'selected' : ''}>1 شهر</option>
                     <option value="2 شهر" data-months="2" ${(existing?.subscriptionType === '2 شهر' || existing?.subscriptionType === 'اشتراك شهرين') ? 'selected' : ''}>2 شهر</option>
                     <option value="3 شهر" data-months="3" ${(existing?.subscriptionType === '3 شهر' || existing?.subscriptionType === 'اشتراك 3 أشهر') ? 'selected' : ''}>3 شهر</option>
@@ -1473,11 +1474,11 @@
               <div class="form-row">
                 <div class="form-group">
                   <label>تاريخ الانتهاء</label>
-                  <input type="date" id="sub-exp" value="${existing?.expiryDate || ''}">
+                  <input type="date" id="sub-exp" ${isAdmin ? '' : 'disabled'} value="${existing?.expiryDate || ''}">
                 </div>
                 <div class="form-group">
                   <label>حالة الدفع *</label>
-                  <select id="sub-payment">
+                  <select id="sub-payment" ${isAdmin ? '' : 'disabled'}>
                     <option value="مدفوع" ${!existing || existing.paymentStatus === 'مدفوع' || existing.paymentStatus === 'نقد' ? 'selected' : ''}>🟢 مدفوع (نقد)</option>
                     <option value="دين" ${existing?.paymentStatus === 'دين' || existing?.paymentStatus === 'غير مدفوع' ? 'selected' : ''}>🔴 دين</option>
                   </select>

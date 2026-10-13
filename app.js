@@ -194,7 +194,7 @@
           localStorage.setItem('sari_active_session', JSON.stringify(defaultAdmin));
           sessionStorage.setItem('sari_active_session', JSON.stringify(defaultAdmin));
           if (getEngine().db) {
-            getEngine().fetchAllCentralCollections();
+            getEngine().forceSync();
             getEngine().startRealtimeSync();
             if (window.fixMissingAgents) window.fixMissingAgents();
           }
@@ -456,10 +456,11 @@
     // Refresh / Sync ↻
     const syncBtn = document.getElementById('btn-sync-data');
     if (syncBtn) {
-      syncBtn.addEventListener('click', () => {
+      syncBtn.addEventListener('click', async () => {
         syncBtn.style.transform = 'rotate(360deg)';
         setTimeout(() => syncBtn.style.transform = '', 500);
-        getEngine().loadLocal();
+        showToast('جاري تحديث البيانات من السيرفر...', 'info');
+        await getEngine().forceSync();
         navigateTo(currentPage);
         showToast('تم تحديث البيانات بنجاح', 'success');
       });
