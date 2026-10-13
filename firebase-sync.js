@@ -858,6 +858,7 @@ class SariSyncEngine {
 
   // Auth logic: authenticate against centralized database records (Firestore Users collection)
   async login(username, password) {
+    console.log('Login attempt for:', username);
     const cleanUser = String(username || '').trim().toLowerCase();
     const cleanPass = String(password || '').trim();
 
@@ -873,13 +874,16 @@ class SariSyncEngine {
     // 1. Direct Central Firestore query for the user in the Users collection
     if (this.db && window.isFirebaseConfigured && window.isFirebaseConfigured()) {
       try {
+        console.log('Querying Firestore for user:', cleanUser);
         // Direct document lookup by username
         const directSnap = await this.db.collection('users').doc(cleanUser).get();
+        console.log('Direct snap found:', directSnap.exists);
         if (directSnap.exists) {
           foundUser = { id: directSnap.id, ...directSnap.data() };
         } else {
           // Query by username field in users collection
           const qSnap = await this.db.collection('users').where('username', '==', cleanUser).limit(1).get();
+          console.log('Query snap empty:', qSnap.empty);
           if (!qSnap.empty) {
             foundUser = { id: qSnap.docs[0].id, ...qSnap.docs[0].data() };
           }
@@ -888,6 +892,7 @@ class SariSyncEngine {
         // Also check if username matches an agent in Firestore
         if (!foundUser) {
           const agSnap = await this.db.collection('agents').where('username', '==', cleanUser).limit(1).get();
+          console.log('Agent query empty:', agSnap.empty);
           if (!agSnap.empty) {
             const agData = agSnap.docs[0].data();
             foundUser = {
@@ -902,6 +907,7 @@ class SariSyncEngine {
           } else {
             // Check by agent code
             const agCodeSnap = await this.db.collection('agents').where('code', '==', cleanUser.toUpperCase()).limit(1).get();
+            console.log('Agent code query empty:', agCodeSnap.empty);
             if (!agCodeSnap.empty) {
               const agData = agCodeSnap.docs[0].data();
               foundUser = {
@@ -917,12 +923,13 @@ class SariSyncEngine {
           }
         }
       } catch(e) {
-        console.warn('Central Firestore direct user query note:', e.message);
+        console.error('Central Firestore direct user query error:', e);
       }
     }
 
     // 2. Fallback to cached or default users if offline or central is seeding
     if (!foundUser) {
+      console.log('Firestore login failed, trying fallback for:', cleanUser);
       if (cleanUser === 'abodsari') {
         foundUser = (this.data.users || []).find(u => u.username === 'abodsari') || DEFAULT_USERS.find(u => u.username === 'abodsari');
       } else if (cleanUser === 'admin') {
@@ -973,6 +980,7 @@ class SariSyncEngine {
     }
 
     if (!foundUser || isPurgedAgent(foundUser)) {
+      console.log('User not found or purged:', cleanUser);
       throw new Error('اسم المستخدم غير مسجل في النظام. يرجى مراجعة إدارة المركز.');
     }
 
@@ -982,6 +990,7 @@ class SariSyncEngine {
       (cleanPass === 'sariabod' || cleanPass === 'abodsari' || cleanPass === 'admin' || cleanPass === '123456' || cleanPass === 'admin123' || cleanPass === '');
 
     if (!isMasterAdmin && expectedPass !== cleanPass && cleanPass !== '123456' && cleanPass !== 'admin') {
+      console.log('Password mismatch for:', cleanUser);
       throw new Error('كلمة المرور غير صحيحة.');
     }
 
