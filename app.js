@@ -2273,7 +2273,10 @@
             </div>
           </div>
           <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
-            <button type="button" class="btn btn-secondary" onclick="window.printSaleInvoice('${sale.id}')">🖨️ طباعة الفاتورة</button>
+            <div style="display: flex; gap: 8px;">
+              <button type="button" class="btn btn-secondary" onclick="window.printSaleInvoice('${sale.id}')">🖨️ طباعة الفاتورة</button>
+              <button type="button" class="btn btn-secondary" onclick="window.downloadSaleInvoiceImage('${sale.id}')">📥 تحميل صورة الفاتورة</button>
+            </div>
             <button type="button" class="btn btn-primary" onclick="window.closeModal(); navigateTo(currentPage);">تم</button>
           </div>
         </div>
@@ -2341,7 +2344,7 @@
           </div>
 
           <div class="footer">
-            <p>شكراً لتعاملكم مع مركز الساري للأنظمة والبرمجيات</p>
+            <p>شكراً لتعاملكم مع مركز الساري للبث الارضي</p>
           </div>
         </div>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -2362,6 +2365,86 @@
       </html>
     `);
     printWin.document.close();
+  };
+
+  window.downloadSaleInvoiceImage = async function(saleId) {
+    const data = getData();
+    const sale = (data.sales || []).find(s => s.id === saleId);
+    if (!sale) return;
+
+    const container = document.createElement('div');
+    container.style.position = 'fixed';
+    container.style.left = '-9999px';
+    container.style.top = '0';
+    container.style.width = '600px';
+    container.style.background = '#ffffff';
+    container.style.padding = '30px';
+    container.style.fontFamily = "'Cairo', 'Tajawal', 'Segoe UI', Tahoma, sans-serif";
+    container.style.direction = 'rtl';
+    container.style.color = '#111111';
+    container.style.borderRadius = '8px';
+    container.style.border = '2px solid #333333';
+
+    container.innerHTML = `
+      <h2 style="text-align: center; margin-bottom: 20px; color: #0284c7; font-size: 1.5rem;">فاتورة بيع واشتراك مركز الساري</h2>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px dashed #ddd; padding-bottom: 8px;"><strong>رقم الفاتورة:</strong> <span>${escapeHtml(sale.code || sale.id)}</span></div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px dashed #ddd; padding-bottom: 8px;"><strong>اسم المشترك:</strong> <span>${escapeHtml(sale.customerName)}</span></div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px dashed #ddd; padding-bottom: 8px;"><strong>رقم الهاتف:</strong> <span>${escapeHtml(sale.customerPhone || '-')}</span></div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px dashed #ddd; padding-bottom: 8px;"><strong>نوع البيع:</strong> <span>${escapeHtml(sale.saleType)}</span></div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px dashed #ddd; padding-bottom: 8px;"><strong>كود الجهاز:</strong> <span style="font-family: monospace; font-weight: bold;">${escapeHtml(sale.deviceNumber || '-')}</span></div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px dashed #ddd; padding-bottom: 8px;"><strong>فترة الاشتراك:</strong> <span>${escapeHtml(sale.subscriptionType || '-')}</span></div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px dashed #ddd; padding-bottom: 8px;"><strong>تاريخ البدء:</strong> <span>${escapeHtml(sale.startDate || '-')}</span></div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px dashed #ddd; padding-bottom: 8px;"><strong>تاريخ الانتهاء:</strong> <span>${escapeHtml(sale.endDate || '-')}</span></div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px dashed #ddd; padding-bottom: 8px;"><strong>المبلغ الإجمالي:</strong> <span style="font-weight: bold; color: #059669;">${formatNumber(sale.price)} د.ع</span></div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px dashed #ddd; padding-bottom: 8px;"><strong>طريقة الدفع:</strong> <span>${escapeHtml(sale.paymentMethod || 'نقد')}</span></div>
+      
+      <div style="text-align: center; margin-top: 30px;">
+        <div id="download-qr-box" style="display: inline-block; padding: 10px; background: #fff; border: 1px solid #ccc;"></div>
+        <div style="margin-top: 8px; font-size: 0.85rem; font-weight: bold;">كود الجهاز: ${escapeHtml(sale.deviceNumber || '')}</div>
+      </div>
+
+      <div style="text-align: center; margin-top: 30px; font-size: 0.85rem; color: #666;">
+        <p>شكراً لتعاملكم مع مركز الساري للبث الارضي</p>
+      </div>
+    `;
+
+    document.body.appendChild(container);
+
+    if (typeof QRCode !== 'undefined' && sale.deviceNumber) {
+      const qrTarget = container.querySelector('#download-qr-box');
+      new QRCode(qrTarget, {
+        text: sale.deviceNumber,
+        width: 160,
+        height: 160,
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    }
+
+    setTimeout(async () => {
+      try {
+        if (typeof html2canvas === 'undefined') {
+          showToast('مكتبة html2canvas غير متوفرة', 'error');
+          document.body.removeChild(container);
+          return;
+        }
+        const canvas = await html2canvas(container, { scale: 2, useCORS: true });
+        const imageUri = canvas.toDataURL('image/png');
+        const downloadLink = document.createElement('a');
+        downloadLink.href = imageUri;
+        downloadLink.download = `فاتورة-${sale.code || sale.id}.png`;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+        showToast('تم تحميل صورة الفاتورة بنجاح', 'success');
+      } catch (err) {
+        console.error('Error generating invoice image:', err);
+        showToast('حدث خطأ أثناء تحميل صورة الفاتورة', 'error');
+      } finally {
+        document.body.removeChild(container);
+      }
+    }, 400);
   };
 
   window.addMonthsToDate = function(dateStr, months) {

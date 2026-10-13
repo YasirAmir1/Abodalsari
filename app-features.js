@@ -1446,7 +1446,7 @@
                 </div>
                 <div class="form-group">
                   <label>المالك / الوكيل *</label>
-                  <select id="sub-owner">
+                  <select id="sub-owner" onchange="updateSubModalDates(); updateSubModalPrice();">
                     <option value="المركز الرئيسي" ${!existing || existing.owner === 'المركز الرئيسي' ? 'selected' : ''}>المركز الرئيسي</option>
                     ${agents.map(a => `<option value="${escapeHtml(a.name)}" ${existing?.owner === a.name ? 'selected' : ''}>${escapeHtml(a.name)}</option>`).join('')}
                   </select>
@@ -1472,11 +1472,24 @@
                   <input type="date" id="sub-exp" ${isAdmin ? '' : 'disabled'} value="${existing?.expiryDate || ''}">
                 </div>
                 <div class="form-group">
+                  <label>حالة الاشتراك (فعال / غير فعال) *</label>
+                  <button type="button" class="px-4 py-2 rounded-lg font-bold ${(!existing || existing.status === 'فعال' || existing.activeStatus === 'فعال') ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}" onclick="window.toggleStatus(this)">
+                    ${(!existing || existing.status === 'فعال' || existing.activeStatus === 'فعال') ? '🟢 فعال' : '🔴 غير فعال'}
+                  </button>
+                  <input type="hidden" id="sub-active-status" value="${(!existing || existing.status === 'فعال' || existing.activeStatus === 'فعال') ? 'فعال' : 'غير فعال'}">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
                   <label>حالة الدفع *</label>
                   <select id="sub-payment" ${isAdmin ? '' : 'disabled'}>
                     <option value="مدفوع" ${!existing || existing.paymentStatus === 'مدفوع' || existing.paymentStatus === 'نقد' ? 'selected' : ''}>🟢 مدفوع (نقد)</option>
                     <option value="دين" ${existing?.paymentStatus === 'دين' || existing?.paymentStatus === 'غير مدفوع' ? 'selected' : ''}>🔴 دين</option>
                   </select>
+                </div>
+                <div class="form-group">
+                  <label>المبلغ المعتمد للبيع (د.ع) * <span style="font-size: 0.72rem; color: var(--muted);">(تلقائي من السستم)</span></label>
+                  <input type="text" id="sub-price" required ${isAdmin ? '' : 'readonly'} value="${formatNumber(existing?.price !== undefined ? existing.price : 25000)}" oninput="this.dataset.manualEdited='true'" style="font-weight: 700; color: var(--green);">
                 </div>
               </div>
             </div>
@@ -1488,6 +1501,19 @@
         </div>
       </div>
     `;
+
+    window.toggleStatus = function(btn) {
+      const input = document.getElementById('sub-active-status');
+      if (input.value === 'فعال') {
+        input.value = 'غير فعال';
+        btn.textContent = '🔴 غير فعال';
+        btn.className = 'px-4 py-2 rounded-lg font-bold bg-red-500 text-white';
+      } else {
+        input.value = 'فعال';
+        btn.textContent = '🟢 فعال';
+        btn.className = 'px-4 py-2 rounded-lg font-bold bg-green-500 text-white';
+      }
+    };
 
     window.updateSubModalDates = function() {
       const actInput = document.getElementById('sub-act');
@@ -1502,8 +1528,30 @@
       }
     };
 
+    window.updateSubModalPrice = function() {
+      const owner = document.getElementById('sub-owner')?.value || 'المركز الرئيسي';
+      const durationSelect = document.getElementById('sub-type');
+      const selectedOption = durationSelect ? durationSelect.options[durationSelect.selectedIndex] : null;
+      const months = selectedOption ? (Number(selectedOption.getAttribute('data-months')) || 1) : 1;
+
+      const group = window.getAgentPricing ? window.getAgentPricing(owner) : { sub1: 25000, sub2: 50000, sub3: 75000 };
+      let price = group.sub1 || 25000;
+      if (months === 1) price = group.sub1 || 25000;
+      else if (months === 2) price = group.sub2 || ((group.sub1 || 25000) * 2);
+      else if (months === 3) price = group.sub3 || ((group.sub1 || 25000) * 3);
+      else price = (group.sub1 || 25000) * months;
+
+      const priceInput = document.getElementById('sub-price');
+      if (priceInput && !priceInput.dataset.manualEdited && !existing?.price) {
+        priceInput.value = formatNumber(price);
+      }
+    };
+
     if (!existing?.expiryDate) {
       window.updateSubModalDates();
+    }
+    if (!existing?.price && typeof window.updateSubModalPrice === 'function') {
+      window.updateSubModalPrice();
     }
 
     document.getElementById('subscriber-form').onsubmit = async (e) => {
@@ -1518,9 +1566,10 @@
         const subscriptionType = document.getElementById('sub-type').value;
         const expiryDate = document.getElementById('sub-exp').value;
         const paymentStatus = document.getElementById('sub-payment').value;
+        const status = document.getElementById('sub-active-status').value;
+        const price = parseNumber(document.getElementById('sub-price').value) || 25000;
 
         const subs = data.subscribers || [];
-        const status = (expiryDate && expiryDate >= today) ? 'فعال' : (existing?.status === 'فعال' ? 'فعال' : 'غير فعال');
 
         if (existing) {
           existing.name = name;
@@ -1537,6 +1586,7 @@
           existing.paymentMethod = paymentStatus === 'مدفوع' ? 'نقد' : 'دين';
           existing.status = status;
           existing.activeStatus = status;
+          existing.price = price;
           if (!existing.joiningDate) {
             existing.joiningDate = activationDate || today;
           }
@@ -1553,6 +1603,7 @@
             activeStatus: status,
             paymentStatus,
             paymentMethod: paymentStatus === 'مدفوع' ? 'نقد' : 'دين',
+            price,
             activatedBy: 'المركز الرئيسي',
             activatedByType: 'hq',
             requestedByAgent: false

@@ -210,11 +210,6 @@ window.formatAllDeviceNumbers = function(dataObj) {
     setTimeout(() => {
       try {
         window.syncEngine.saveLocal(dataObj);
-        if (window.syncEngine.db && typeof window.syncEngine.commitData === 'function') {
-          if (Array.isArray(dataObj.subscribers)) window.syncEngine.commitData('subscribers', dataObj.subscribers);
-          if (Array.isArray(dataObj.sales)) window.syncEngine.commitData('sales', dataObj.sales);
-          if (Array.isArray(dataObj.codes)) window.syncEngine.commitData('codes', dataObj.codes);
-        }
       } catch (e) {}
     }, 500);
   }
