@@ -196,6 +196,7 @@
           if (getEngine().db) {
             getEngine().fetchAllCentralCollections();
             getEngine().startRealtimeSync();
+            if (window.fixMissingAgents) window.fixMissingAgents();
           }
         } catch (e) {}
         restored = defaultAdmin;
@@ -258,6 +259,7 @@
   // Navigation router
   function navigateTo(page) {
     currentPage = page;
+    window.currentView = page;
     const currentUser = (typeof getEngine === 'function' && getEngine().currentUser) || null;
     const isAgent = currentUser && (currentUser.role === 'agent' || currentUser.role === 'وكيل' || !(currentUser.role === 'admin' || currentUser.role === 'أدمن' || currentUser.role === 'مدير رئيسي'));
     const pageTitleMap = {
@@ -361,13 +363,20 @@
 
   // --- Global Event Listeners ---
   function attachGlobalEvents() {
-    window.addEventListener('sari:data-updated', () => {
+    window.addEventListener('sari:data-updated', (e) => {
       updatePendingApprovalsBadge();
       if (typeof window.checkAdminPendingSubmissionsNotification === 'function') {
         window.checkAdminPendingSubmissionsNotification();
       }
       if (typeof window.checkAgentPendingSubmissionsNotification === 'function') {
         window.checkAgentPendingSubmissionsNotification();
+      }
+      // Real-time update for subscribers list
+      if (e.detail?.collection === 'subscribers' || e.detail?.collection === 'all') {
+        const mainContent = document.getElementById('main-content');
+        if (mainContent && window.currentView === 'subscribers' && typeof window.renderSubscribers === 'function') {
+          window.renderSubscribers(mainContent);
+        }
       }
     });
 

@@ -920,6 +920,26 @@ class SariSyncEngine {
     }
 
     if (!foundUser || isPurgedAgent(foundUser)) {
+      // Fallback to DEFAULT_AGENTS
+      const matchedAgent = DEFAULT_AGENTS.find(a => 
+        (a.username && a.username.trim().toLowerCase() === cleanUser) ||
+        (a.code && a.code.trim().toLowerCase() === cleanUser) ||
+        (a.id && a.id.toLowerCase() === cleanUser)
+      );
+      if (matchedAgent) {
+        foundUser = {
+          uid: matchedAgent.id || ('u-' + (matchedAgent.code || cleanUser)),
+          username: matchedAgent.username || cleanUser,
+          displayName: matchedAgent.name,
+          role: 'agent',
+          agentName: matchedAgent.name,
+          agentCode: matchedAgent.code || '',
+          password: matchedAgent.password
+        };
+      }
+    }
+
+    if (!foundUser || isPurgedAgent(foundUser)) {
       throw new Error('اسم المستخدم غير مسجل في النظام. يرجى مراجعة إدارة المركز.');
     }
 
@@ -1637,6 +1657,23 @@ window.resolveAgentName = function(record) {
   );
   if (match) return match.name;
   return raw || 'المركز الرئيسي';
+};
+
+window.fixMissingAgents = function() {
+  const engine = window.syncEngine;
+  const data = engine.data;
+  if (!data.agents) data.agents = [];
+  
+  // Merge default agents into existing agents list if not already present
+  DEFAULT_AGENTS.forEach(defAg => {
+    if (!data.agents.find(a => a.id === defAg.id || a.username === defAg.username)) {
+      console.log('Adding missing agent:', defAg.name);
+      data.agents.push(defAg);
+    }
+  });
+  // Note: We don't necessarily need to commitData immediately as this 
+  // might be overwritten by fetchAllCentralCollections.
+  // Instead, ensure the UI has access to these defaults if they are missing.
 };
 
 window.syncEngine = new SariSyncEngine();
