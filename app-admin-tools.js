@@ -3238,79 +3238,7 @@
           </div>
         ` : ''}
 
-        <!-- Filter Bar: Search by Name & Customer Status Filter -->
-        <div class="content-card" style="margin-bottom: 24px;">
-          <div class="card-header-bar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-            <h3>سجل عملياتك ومبيعاتك للزبائن</h3>
-            <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-              <!-- Status Filter: All, Active, Inactive -->
-              <div class="filter-chips">
-                <span style="font-size: 0.85rem; font-weight: 600; color: var(--muted); margin-left: 4px;">حالة الزبون:</span>
-                <span class="chip ${agentFilter.status === 'all' ? 'active' : ''}" onclick="setAgentFilter('status', 'all')">الكل</span>
-                <span class="chip ${agentFilter.status === 'فعال' ? 'active' : ''}" onclick="setAgentFilter('status', 'فعال')">🟢 فعال</span>
-                <span class="chip ${agentFilter.status === 'غير فعال' ? 'active' : ''}" onclick="setAgentFilter('status', 'غير فعال')">🔴 غير فعال</span>
-              </div>
-              <!-- Search Input: Search subscribers/customers by name -->
-              <div class="search-box" style="position: relative; display: flex; align-items: center;">
-                <span class="search-icon">🔍</span>
-                <input type="text" id="agent-search-input" placeholder="بحث باسم المشترك، الهاتف، الجهاز..." value="${escapeHtml(agentFilter.search)}" oninput="onAgentSearchInput(this.value)">
-                ${agentFilter.search ? `<button type="button" onclick="onAgentSearchInput('')" style="position: absolute; left: 10px; background: none; border: none; cursor: pointer; color: var(--muted); font-size: 0.9rem; padding: 2px 6px;" title="إلغاء البحث">✕</button>` : ''}
-              </div>
-            </div>
-          </div>
 
-          <!-- Agent's Sales History Table with Subscription Start & End Dates -->
-          <div class="table-responsive">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>الفاتورة / الزبون</th>
-                  <th>الجهاز / نوع العملية</th>
-                  <th>فترة الاشتراك</th>
-                  <th>حالة الاشتراك</th>
-                  <th>المبلغ والدفع</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${filteredSales.length === 0 ? `<tr><td colspan="5" style="text-align: center; color: var(--muted); padding: 30px;">لا توجد عمليات تطابق البحث أو الفلتر المحدد</td></tr>` : 
-                  filteredSales.map(s => `
-                    <tr>
-                      <td>
-                        <strong style="color: var(--green); font-size: 0.85rem;">${escapeHtml(s.code)}</strong>
-                        <div class="cell-title">${escapeHtml(s.customerName)}</div>
-                        <div class="cell-subtitle" style="direction: ltr; text-align: right;">${escapeHtml(s.customerPhone || '-')}</div>
-                      </td>
-                      <td>
-                        <div style="font-family: monospace; font-size: 0.84rem;">
-                          <span style="cursor: pointer; color: var(--green); text-decoration: underline; font-weight: 700;" onclick="showDeviceBarcodeModal('${escapeHtml(s.deviceNumber)}')" title="انقر لعرض QR Code">${escapeHtml(s.deviceNumber)}</span>
-                        </div>
-                        <div class="cell-subtitle">${escapeHtml(s.subscriptionType || s.saleType)}</div>
-                      </td>
-                      <td>
-                        <div class="cell-date-range" style="direction: ltr;">
-                          <span class="cell-date-from">بدء: ${escapeHtml(s.startDate || '-')}</span>
-                          <span class="cell-date-to">انتهاء: ${escapeHtml(s.endDate || '-')}</span>
-                        </div>
-                      </td>
-                      <td>
-                        <span class="badge ${s.activeStatus === 'فعال' ? 'badge-success' : 'badge-danger'}">
-                          ${escapeHtml(s.activeStatus)}
-                        </span>
-                      </td>
-                      <td>
-                        <strong class="cell-title">${formatIQD(s.price)}</strong>
-                        <div style="margin-top: 2px;">
-                          <span class="badge ${(s.paymentMethod === 'نقد' || s.paymentStatus === 'نقد' || s.paymentStatus === 'تم التسديد') ? 'badge-success' : 'badge-danger'}">
-                            ${(s.paymentMethod === 'نقد' || s.paymentStatus === 'نقد' || s.paymentStatus === 'تم التسديد') ? 'نقد' : 'دين'}
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
-                  `).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
 
         <!-- Agent's Customers / Subscribers List -->
         <div class="content-card">

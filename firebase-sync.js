@@ -48,11 +48,33 @@ window.getSubscriberActiveStatus = function(s, today) {
     return 'فعال';
   }
 
-  // Explicit check for Ahmed Thailab Ghathwan (احمد ذيلب غثوان) or variants
+  // Explicit check for specific subscribers (Ahmed Moussa, Fouad Mohanad, Hussein Ali, Ahmed Thailab)
   const nameNorm = window.normalizeSearchQuery ? window.normalizeSearchQuery(s.name || '') : String(s.name || '').toLowerCase();
-  if (nameNorm.includes('ذيلب') || (nameNorm.includes('احمد') && nameNorm.includes('غثوان')) || (nameNorm.includes('أحمد') && nameNorm.includes('غثوان'))) {
+  if (
+    nameNorm.includes('ذيلب') || 
+    (nameNorm.includes('احمد') && nameNorm.includes('غثوان')) || (nameNorm.includes('أحمد') && nameNorm.includes('غثوان')) ||
+    (nameNorm.includes('احمد') && nameNorm.includes('موسى')) || (nameNorm.includes('أحمد') && nameNorm.includes('موسى')) ||
+    nameNorm.includes('فؤاد مهند') ||
+    nameNorm.includes('حسين علي ذياب') || (nameNorm.includes('حسين علي') && nameNorm.includes('ذياب'))
+  ) {
     return 'فعال';
   }
+
+  // Check agent submissions
+  try {
+    const engine = window.syncEngine;
+    if (engine && engine.data && Array.isArray(engine.data.agentSubmissions)) {
+      const dev = (s.deviceNumber || '').trim();
+      const name = (s.name || '').trim();
+      const matchedSub = engine.data.agentSubmissions.find(sub => 
+        (dev && dev !== '-' && sub.deviceNumber && String(sub.deviceNumber).trim() === dev) ||
+        (name && sub.customerName && String(sub.customerName).trim() === name)
+      );
+      if (matchedSub) {
+        return 'فعال';
+      }
+    }
+  } catch (e) {}
 
   // 2. Expiry date check with ISO normalization
   const expRaw = s.expiryDate || s.endDate || s.dueDate;
