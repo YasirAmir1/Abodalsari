@@ -1304,6 +1304,18 @@
       const phone = document.getElementById('asr-phone').value.trim();
       const deviceNumber = document.getElementById('asr-device').value.trim();
       const owner = document.getElementById('asr-owner').value;
+
+      const currentUser = getEngine()?.currentUser;
+      const isAdmin = typeof window.isSystemAdmin === 'function' ? window.isSystemAdmin(currentUser) : (currentUser?.role === 'admin' || currentUser?.username === 'abodsari');
+
+      if (isAdmin && owner && owner !== 'المركز الرئيسي') {
+        window.showToast('عذراً، لا يمكن للرئيسية التفعيل المباشر لزبائن الوكلاء. يتم التفعيل حصرياً عبر طلبات الاعتماد المقدمة من الوكيل.', 'error');
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = submitBtn.dataset.origHTML || 'حفظ';
+        }
+        return;
+      }
       const joiningDate = document.getElementById('asr-joining')?.value || sub.joiningDate || new Date().toISOString().substring(0, 10);
       const startDate = document.getElementById('asr-start').value;
       const subscriptionType = document.getElementById('asr-duration').value;
@@ -1568,6 +1580,16 @@
         const paymentStatus = document.getElementById('sub-payment').value;
         const status = document.getElementById('sub-active-status').value;
         const price = parseNumber(document.getElementById('sub-price').value) || 25000;
+
+        const currentUser = getEngine()?.currentUser;
+        const isAdmin = typeof window.isSystemAdmin === 'function' ? window.isSystemAdmin(currentUser) : (currentUser?.role === 'admin' || currentUser?.username === 'abodsari');
+
+        if (isAdmin && owner !== 'المركز الرئيسي' && status === 'فعال') {
+          window.showToast('عذراً، لا يمكن للرئيسية التفعيل المباشر لزبائن الوكلاء. يتم التفعيل حصرياً عبر طلبات الاعتماد المقدمة من الوكيل.', 'error');
+          const saveBtn = document.getElementById('btn-sub-save');
+          if (saveBtn) saveBtn.disabled = false;
+          return;
+        }
 
         const subs = data.subscribers || [];
 

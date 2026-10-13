@@ -2052,6 +2052,18 @@
         const paymentMethod = document.getElementById('sf-payment').value;
         const paymentStatus = paymentMethod === 'نقد' ? 'تم التسديد' : 'دين';
 
+        const currentUser = getEngine()?.currentUser;
+        const isAdmin = typeof window.isSystemAdmin === 'function' ? window.isSystemAdmin(currentUser) : (currentUser?.role === 'admin' || currentUser?.username === 'abodsari');
+
+        if (isAdmin && seller && seller !== 'المركز الرئيسي' && paymentMethod === 'نقد') {
+          window.showToast('عذراً، لا يمكن للرئيسية التفعيل المباشر لزبائن الوكلاء. يتم التفعيل حصرياً عبر طلبات الاعتماد المقدمة من الوكيل.', 'error');
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = submitBtn.dataset.origHTML || 'تسجيل الفاتورة';
+          }
+          return;
+        }
+
         const data = getData();
         const allSales = data.sales || [];
         const existing = sId ? allSales.find(s => s.id === sId) : null;
@@ -2113,8 +2125,8 @@
             existing.agentPaid = price;
           }
 
-          await getEngine().commitData('sales', allSales);
-          await getEngine().commitData('debts', debts);
+          getEngine().commitData('sales', allSales).catch(err => console.warn('Sales sync warning:', err));
+          getEngine().commitData('debts', debts).catch(err => console.warn('Debts sync warning:', err));
           showToast('تم تحديث الفاتورة بنجاح', 'success');
           window.closeModal();
           window.openSaleSuccessModal(existing);
@@ -2169,7 +2181,7 @@
               createdAt: startDate
             };
             debts = [newDebt, ...debts];
-            await getEngine().commitData('debts', debts);
+            getEngine().commitData('debts', debts).catch(err => console.warn('Debts sync warning:', err));
           }
 
           // Auto update / register subscriber
@@ -2215,10 +2227,10 @@
                 activeStatus: 'فعال'
               });
             }
-            await getEngine().commitData('subscribers', subs);
+            getEngine().commitData('subscribers', subs).catch(err => console.warn('Subscribers sync warning:', err));
           }
 
-          await getEngine().commitData('sales', updatedSales);
+          getEngine().commitData('sales', updatedSales).catch(err => console.warn('Sales sync warning:', err));
           showToast('تم تسجيل وتفعيل الفاتورة بنجاح', 'success');
           window.closeModal();
           window.openSaleSuccessModal(newSale);
@@ -2549,23 +2561,31 @@
     }
   };
 
+  let qrDebounceTimer = null;
   window.updateSaleQrCode = function(val) {
-    const box = document.getElementById('sf-qr-box');
-    if (!box) return;
-    box.innerHTML = '';
-    const text = (val || '').trim();
-    if (text && typeof QRCode !== 'undefined') {
-      new QRCode(box, {
-        text: text,
-        width: 150,
-        height: 150,
-        colorDark: "#000000",
-        colorLight: "#ffffff",
-        correctLevel: QRCode.CorrectLevel.M
-      });
-    } else {
-      box.innerHTML = '<span style="font-size: 0.75rem; color: var(--muted); display: flex; align-items: center; justify-content: center; height: 100%;">أدخل رقم الجهاز لعرض QR</span>';
-    }
+    if (qrDebounceTimer) clearTimeout(qrDebounceTimer);
+    qrDebounceTimer = setTimeout(() => {
+      const box = document.getElementById('sf-qr-box');
+      if (!box) return;
+      box.innerHTML = '';
+      const text = (val || '').trim();
+      if (text && typeof QRCode !== 'undefined') {
+        try {
+          new QRCode(box, {
+            text: text,
+            width: 135,
+            height: 135,
+            colorDark: "#000000",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.M
+          });
+        } catch (e) {
+          console.warn('QR gen error:', e);
+        }
+      } else {
+        box.innerHTML = '<span style="font-size: 0.7rem; color: var(--muted); display: flex; align-items: center; justify-content: center; height: 100%;">أدخل رقم الجهاز لعرض QR</span>';
+      }
+    }, 150);
   };
 
   window.closeModal = function() {

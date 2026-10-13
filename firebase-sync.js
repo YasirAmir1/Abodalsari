@@ -206,6 +206,36 @@ window.formatAllDeviceNumbers = function(dataObj) {
     });
   }
 
+  // Synchronize customer remaining amount between Main and Agents (subscribers, sales, and debts)
+  if (Array.isArray(dataObj.subscribers) && Array.isArray(dataObj.debts)) {
+    dataObj.subscribers.forEach(s => {
+      const dev = (s.deviceNumber || '').trim();
+      const name = (s.name || '').trim();
+      const matchedDebt = dataObj.debts.find(d => 
+        (dev && dev !== '-' && d.deviceNumber && String(d.deviceNumber).trim() === dev) ||
+        (name && d.customerName && String(d.customerName).trim().includes(name))
+      );
+      if (matchedDebt) {
+        const rem = Number(matchedDebt.remainingAmount) || 0;
+        if (s.remainingAmount !== rem) {
+          s.remainingAmount = rem;
+          changed = true;
+        }
+        if (rem > 0) {
+          if (s.paymentStatus !== 'دين' && s.paymentStatus !== 'غير مدفوع') {
+            s.paymentStatus = 'دين';
+            changed = true;
+          }
+        } else {
+          if (s.paymentStatus === 'دين' || s.paymentStatus === 'غير مدفوع') {
+            s.paymentStatus = 'مدفوع';
+            changed = true;
+          }
+        }
+      }
+    });
+  }
+
   if (changed && window.syncEngine && typeof window.syncEngine.saveLocal === 'function') {
     setTimeout(() => {
       try {
@@ -980,7 +1010,12 @@ class SariSyncEngine {
         window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'all' } }));
       }
     } catch (e) {
-      console.warn('Error fetching all central collections:', e.message);
+      if (e?.code === 'resource-exhausted' || e?.message?.includes('quota') || e?.message?.includes('Quota')) {
+        window.firestoreQuotaExceeded = true;
+        console.warn('Firestore quota limit reached during fetch. Running in local mode.');
+      } else {
+        console.warn('Error fetching all central collections:', e.message);
+      }
     }
   }
 
@@ -1478,15 +1513,24 @@ class SariSyncEngine {
           this.saveLocal();
           window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: col } }));
         }, err => {
-          console.warn(`Firestore listener on ${col}:`, err.message);
+          if (err?.code === 'resource-exhausted' || err?.message?.includes('quota') || err?.message?.includes('Quota')) {
+            window.firestoreQuotaExceeded = true;
+          } else {
+            console.warn(`Firestore listener on ${col}:`, err.message);
+          }
         });
         this.unsubscribers.push(unsub);
       } catch (e) {
-        console.warn(`Could not attach listener for ${col}`, e);
+        if (e?.code === 'resource-exhausted' || e?.message?.includes('quota') || e?.message?.includes('Quota')) {
+          window.firestoreQuotaExceeded = true;
+        } else {
+          console.warn(`Could not attach listener for ${col}`, e);
+        }
       }
     });
 
     // Submissions sync
+    if (window.firestoreQuotaExceeded) return;
     try {
       const subUnsub = this.db.collection('agentSubmissions').onSnapshot(snap => {
         const subs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -1499,7 +1543,13 @@ class SariSyncEngine {
         }
         this.saveLocal();
         window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'agentSubmissions' } }));
-      }, err => console.warn('Submissions listener err:', err));
+      }, err => {
+        if (err?.code === 'resource-exhausted' || err?.message?.includes('quota') || err?.message?.includes('Quota')) {
+          window.firestoreQuotaExceeded = true;
+        } else {
+          console.warn('Submissions listener err:', err);
+        }
+      });
       this.unsubscribers.push(subUnsub);
     } catch (e) {}
   }
@@ -1513,7 +1563,7 @@ class SariSyncEngine {
 
   // Diff-write batch save to Firestore with fixed IDs for singletons
   async pushToFirestore(collectionName, items) {
-    if (!this.db || !window.isFirebaseConfigured()) return;
+    if (window.firestoreQuotaExceeded || !this.db || !window.isFirebaseConfigured()) return;
     try {
       const itemsList = Array.isArray(items) ? items : [items];
       const batchSize = 400;
@@ -1560,6 +1610,7 @@ class SariSyncEngine {
       }
     } catch (e) {
       if (e?.code === 'resource-exhausted' || e?.message?.includes('quota') || e?.message?.includes('Quota')) {
+        window.firestoreQuotaExceeded = true;
         console.warn('Firestore quota limit reached. Running in local persistence mode.');
       } else {
         console.warn('Error pushing to Firestore:', e?.message || e);
@@ -1601,11 +1652,16 @@ class SariSyncEngine {
       console.warn('Unauthorized: Agents cannot update subscribers directly.');
       return;
     }
-    if (this.db && window.isFirebaseConfigured()) {
+    if (!window.firestoreQuotaExceeded && this.db && window.isFirebaseConfigured()) {
       try {
         await this.pushToFirestore(collectionName, updatedItems);
       } catch (err) {
-        console.warn('Commit data Firestore sync warning:', err);
+        if (err?.code === 'resource-exhausted' || err?.message?.includes('quota') || err?.message?.includes('Quota')) {
+          window.firestoreQuotaExceeded = true;
+          console.warn('Firestore quota limit reached. Running in local persistence mode.');
+        } else {
+          console.warn('Commit data Firestore sync warning:', err);
+        }
       }
     }
     this.data[collectionName] = updatedItems;
@@ -1620,7 +1676,7 @@ class SariSyncEngine {
       console.warn('Unauthorized: Agents cannot update subscribers directly.');
       return;
     }
-    if (this.db && window.isFirebaseConfigured()) {
+    if (!window.firestoreQuotaExceeded && this.db && window.isFirebaseConfigured()) {
       try {
         const batch = this.db.batch();
         for (const update of updates) {
@@ -1643,6 +1699,7 @@ class SariSyncEngine {
         await batch.commit();
       } catch (e) {
         if (e?.code === 'resource-exhausted' || e?.message?.includes('quota') || e?.message?.includes('Quota')) {
+          window.firestoreQuotaExceeded = true;
           console.warn('Firestore quota limit reached during batch commit. Running in local persistence mode.');
         } else {
           console.warn('Batch commit Firestore error:', e?.message || e);
