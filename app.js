@@ -1661,6 +1661,9 @@
           updatedSubscribers[subIdx].activeStatus = 'فعال';
           updatedSubscribers[subIdx].owner = agentName;
           updatedSubscribers[subIdx].agentName = agentName;
+          updatedSubscribers[subIdx].activatedBy = agentName;
+          updatedSubscribers[subIdx].activatedByType = 'agent';
+          updatedSubscribers[subIdx].requestedByAgent = true;
           if (!updatedSubscribers[subIdx].joiningDate) {
             updatedSubscribers[subIdx].joiningDate = startDate;
           }
@@ -1683,7 +1686,10 @@
             paymentStatus: isCash ? 'مدفوع' : 'دين',
             price: Number(req.price) || 0,
             status: 'فعال',
-            activeStatus: 'فعال'
+            activeStatus: 'فعال',
+            activatedBy: agentName,
+            activatedByType: 'agent',
+            requestedByAgent: true
           });
         }
 

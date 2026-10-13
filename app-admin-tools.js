@@ -2274,10 +2274,19 @@
 
   // --- Agent Dashboard (role === 'agent') ---
   let agentFilter = { status: 'all', search: '' };
+  let agentSubsFilter = { status: 'all', payment: 'all' };
   let agentSubsSearch = '';
+
+  window.agentSubsFilter = agentSubsFilter;
 
   window.setAgentFilter = function(key, val) {
     agentFilter[key] = val;
+    const mainEl = document.getElementById('main-content');
+    if (mainEl) window.renderAgentDashboard(mainEl);
+  };
+
+  window.setAgentSubsFilter = function(key, val) {
+    agentSubsFilter[key] = val;
     const mainEl = document.getElementById('main-content');
     if (mainEl) window.renderAgentDashboard(mainEl);
   };
@@ -2690,7 +2699,7 @@
 
   // --- Calculate "Paid to Main / Due to Main" for a Subscriber ---
   window.getSubscriberMainDebtStatus = function(s, data, agentName) {
-    if (!data) data = getData();
+    if (!data) data = (typeof getData === 'function' ? getData() : {});
     const debts = data.debts || [];
     const sales = data.sales || [];
     const devNum = (s.deviceNumber || '').trim();
@@ -2728,54 +2737,143 @@
     const isDirectCash = s.paymentStatus === 'مدفوع' || s.paymentStatus === 'نقد' || s.paymentStatus === 'تم التسديد' || s.paymentMethod === 'نقد';
 
     // If there is any unpaid/debt amount (overdue or credit renewal) or explicitly marked as debt by Headquarters:
-    const overallDue = (Number(totalRemaining) > 0) ? Number(totalRemaining) : (Number(unpaidSalesDue) || 0);
+    const overallDue = (Number(totalRemaining) > 0) 
+      ? Number(totalRemaining) 
+      : (Number(unpaidSalesDue) > 0 
+          ? Number(unpaidSalesDue) 
+          : (Number(s.remainingAmount) || (isDirectDebt ? (Number(s.price) || 25000) : 0)));
+
     if (overallDue > 0 || isDirectDebt) {
-      const displayAmount = overallDue > 0 ? formatIQD(overallDue) : (s.price ? formatIQD(s.price) : 'دين');
+      const displayAmount = overallDue > 0 ? formatIQD(overallDue) : (s.price ? formatIQD(s.price) : '25,000 د.ع');
       return {
         status: 'مطلوب للرئيسية',
         isPaid: false,
-        due: overallDue || Number(s.price) || 0,
+        paymentType: 'دين',
+        due: overallDue || Number(s.price) || 25000,
         paid: totalPaid,
         html: `
           <div style="display: flex; flex-direction: column; gap: 3px;">
-            <span class="badge badge-danger" style="display: inline-flex; align-items: center; gap: 4px; font-weight: 700; width: fit-content;">
-              <span>⏳</span> <span>مطلوب للرئيسية (دين)</span>
+            <span class="badge badge-danger" style="display: inline-flex; align-items: center; gap: 4px; font-weight: 700; width: fit-content; padding: 2px 7px; border-radius: 6px;">
+              <span>⏳</span> <span>مطلوب (دين)</span>
             </span>
-            <span style="font-weight: 800; color: var(--danger); font-size: 0.84rem; font-family: monospace;">
-              ${displayAmount}
-            </span>
-            ${totalPaid > 0 ? `<span style="font-size: 0.72rem; color: var(--muted);">(مسدد: ${formatNumber(totalPaid)})</span>` : ''}
+            <div style="font-weight: 800; color: var(--danger); font-size: 0.85rem; font-family: monospace;">
+              المتبقي: ${displayAmount}
+            </div>
+            ${totalPaid > 0 ? `<div style="font-size: 0.72rem; color: var(--muted);">(المسدد: ${formatNumber(totalPaid)} د.ع)</div>` : ''}
           </div>
         `
       };
     }
 
     // When subscription is renewed in cash, fully settled, or marked as paid by Headquarters:
-    if (isDirectCash || (matchedSales.length > 0 && overallDue === 0)) {
-      const paidSum = totalPaid > 0 ? totalPaid : (matchedSales[0]?.price || s.price || 0);
-      return {
-        status: 'تم التسديد للرئيسية',
-        isPaid: true,
-        due: 0,
-        paid: paidSum,
-        html: `
-          <div style="display: flex; flex-direction: column; gap: 2px;">
-            <span class="badge badge-success" style="display: inline-flex; align-items: center; gap: 4px; font-weight: 700; width: fit-content;">
-              <span>✅</span> <span>تم التسديد للرئيسية (نقد)</span>
-            </span>
-            ${paidSum > 0 ? `<span style="font-size: 0.74rem; color: var(--success); font-weight: 600;">(سُدد: ${formatNumber(paidSum)} د.ع)</span>` : ''}
+    const paidSum = totalPaid > 0 ? totalPaid : (Number(s.paidAmount) || Number(matchedSales[0]?.price) || Number(s.price) || 25000);
+    return {
+      status: 'تم التسديد للرئيسية',
+      isPaid: true,
+      paymentType: 'نقد',
+      due: 0,
+      paid: paidSum,
+      html: `
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <span class="badge badge-success" style="display: inline-flex; align-items: center; gap: 4px; font-weight: 700; width: fit-content; padding: 2px 7px; border-radius: 6px;">
+            <span>✅</span> <span>نقد (مسدد)</span>
+          </span>
+          <div style="font-weight: 800; color: var(--green); font-size: 0.85rem; font-family: monospace;">
+            المسدد: ${formatIQD(paidSum)}
           </div>
+        </div>
+      `
+    };
+  };
+
+  // --- Determine who activated the subscription (Agent requested vs Headquarters activated) ---
+  window.getSubscriberActivator = function(sub, data, agentName) {
+    if (!data) data = (typeof getData === 'function' ? getData() : {});
+    const devNum = String(sub.deviceNumber || '').trim();
+    const subName = String(sub.name || '').trim();
+
+    // 1. Explicit property on subscriber record
+    if (sub.activatedByType === 'agent' || sub.requestedByAgent === true) {
+      const name = sub.activatedBy || sub.owner || agentName || 'الوكيل';
+      return {
+        isAgent: true,
+        type: 'agent',
+        name: name,
+        html: `
+          <span class="badge" style="background: rgba(16, 185, 129, 0.12); color: #047857; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: 700; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px;">
+            <span>👤</span> <span>الوكيل (${escapeHtml(name)})</span>
+          </span>
         `
       };
     }
 
-    // For subscribers with no specific payment/sales/debt info yet:
+    if (sub.activatedByType === 'hq' || sub.activatedBy === 'المركز الرئيسي' || sub.activatedBy === 'الرئيسية') {
+      return {
+        isAgent: false,
+        type: 'hq',
+        name: 'المركز الرئيسي',
+        html: `
+          <span class="badge" style="background: rgba(59, 130, 246, 0.12); color: #1d4ed8; border: 1px solid rgba(59, 130, 246, 0.3); font-weight: 700; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px;">
+            <span>🏢</span> <span>المركز الرئيسي</span>
+          </span>
+        `
+      };
+    }
+
+    // 2. Check pending or past agent submissions
+    const submissions = data.agentSubmissions || [];
+    const matchedSubmission = submissions.find(s => {
+      const sDev = String(s.deviceNumber || '').trim();
+      const sCust = String(s.customerName || '').trim();
+      return (devNum && sDev === devNum) || (subName && sCust === subName);
+    });
+    if (matchedSubmission) {
+      const name = matchedSubmission.agentName || matchedSubmission.seller || agentName || 'الوكيل';
+      return {
+        isAgent: true,
+        type: 'agent',
+        name: name,
+        html: `
+          <span class="badge" style="background: rgba(16, 185, 129, 0.12); color: #047857; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: 700; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px;">
+            <span>👤</span> <span>الوكيل (${escapeHtml(name)})</span>
+          </span>
+        `
+      };
+    }
+
+    // 3. Check sales records for approved agent requests
+    const sales = data.sales || [];
+    const matchedSales = sales.filter(s => {
+      const sDev = String(s.deviceNumber || '').trim();
+      const sCust = String(s.customerName || '').trim();
+      return (devNum && sDev === devNum) || (subName && sCust === subName);
+    });
+
+    const approvedAgentSale = matchedSales.find(s => s.approvalStatus === 'معتمدة' || s.requestedBy || s.submittedBy);
+    if (approvedAgentSale) {
+      const name = approvedAgentSale.agentName || approvedAgentSale.seller || agentName || 'الوكيل';
+      return {
+        isAgent: true,
+        type: 'agent',
+        name: name,
+        html: `
+          <span class="badge" style="background: rgba(16, 185, 129, 0.12); color: #047857; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: 700; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px;">
+            <span>👤</span> <span>الوكيل (${escapeHtml(name)})</span>
+          </span>
+        `
+      };
+    }
+
+    // 4. If activated by Headquarters without an agent order/submission:
     return {
-      status: 'فارغ',
-      isPaid: false,
-      due: 0,
-      paid: 0,
-      html: `<span style="color: var(--muted); font-size: 0.85rem; font-weight: 500;">-</span>`
+      isAgent: false,
+      type: 'hq',
+      name: 'المركز الرئيسي',
+      html: `
+        <span class="badge" style="background: rgba(59, 130, 246, 0.12); color: #1d4ed8; border: 1px solid rgba(59, 130, 246, 0.3); font-weight: 700; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px;">
+          <span>🏢</span> <span>المركز الرئيسي</span>
+        </span>
+      `
     };
   };
 
@@ -2904,13 +3002,29 @@
       });
     }
 
-    // Filter subscribers - strictly identical to Headquarters status logic
+    // Filter subscribers - strictly identical to Headquarters status logic + Subscriber table filters (نقد/دين & فعال/غير فعال)
     let filteredSubs = allMySubscribers.map(s => {
       const activeStatus = window.getSubscriberActiveStatus ? window.getSubscriberActiveStatus(s, today) : (s.status || (s.expiryDate && s.expiryDate >= today ? 'فعال' : 'غير فعال'));
-      return { ...s, activeStatus: activeStatus, status: activeStatus };
+      const debtStatus = window.getSubscriberMainDebtStatus ? window.getSubscriberMainDebtStatus(s, data, agentName) : { status: 'نقد', isPaid: true, paymentType: 'نقد' };
+      const activator = window.getSubscriberActivator ? window.getSubscriberActivator(s, data, agentName) : { name: 'المركز الرئيسي' };
+      return { 
+        ...s, 
+        activeStatus: activeStatus, 
+        status: activeStatus,
+        debtStatus: debtStatus,
+        paymentType: debtStatus.paymentType || (debtStatus.isPaid ? 'نقد' : 'دين'),
+        activator: activator
+      };
     });
-    if (agentFilter.status !== 'all') {
-      filteredSubs = filteredSubs.filter(s => s.activeStatus === agentFilter.status);
+
+    // 1. Status filter (فعال / غير فعال)
+    if (agentSubsFilter.status !== 'all') {
+      filteredSubs = filteredSubs.filter(s => s.activeStatus === agentSubsFilter.status);
+    }
+
+    // 2. Payment filter (نقد / دين)
+    if (agentSubsFilter.payment !== 'all') {
+      filteredSubs = filteredSubs.filter(s => s.paymentType === agentSubsFilter.payment);
     }
     const subSearchQuery = agentSubsSearch || '';
     if (subSearchQuery) {
@@ -3200,12 +3314,33 @@
 
         <!-- Agent's Customers / Subscribers List -->
         <div class="content-card">
-          <div class="card-header-bar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-            <h3>قائمة المشتركين والزبائن المسجلين لك (${filteredSubs.length})</h3>
+          <div class="card-header-bar" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+            <div>
+              <h3 style="margin: 0; display: flex; align-items: center; gap: 6px;">
+                <span>👥</span> <span>قائمة المشتركين والزبائن المسجلين لك (${filteredSubs.length})</span>
+              </h3>
+            </div>
             <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+              <!-- Filter for Cash / Debt (نقد / دين) -->
+              <div class="filter-chips">
+                <span style="font-size: 0.82rem; font-weight: 700; color: var(--muted); margin-left: 2px;">الدفع:</span>
+                <span class="chip ${agentSubsFilter.payment === 'all' ? 'active' : ''}" onclick="setAgentSubsFilter('payment', 'all')">الكل</span>
+                <span class="chip ${agentSubsFilter.payment === 'نقد' ? 'active' : ''}" onclick="setAgentSubsFilter('payment', 'نقد')">💵 نقد</span>
+                <span class="chip ${agentSubsFilter.payment === 'دين' ? 'active' : ''}" onclick="setAgentSubsFilter('payment', 'دين')">⏳ دين</span>
+              </div>
+
+              <!-- Filter for Active / Inactive (فعال / غير فعال) -->
+              <div class="filter-chips">
+                <span style="font-size: 0.82rem; font-weight: 700; color: var(--muted); margin-left: 2px;">الحالة:</span>
+                <span class="chip ${agentSubsFilter.status === 'all' ? 'active' : ''}" onclick="setAgentSubsFilter('status', 'all')">الكل</span>
+                <span class="chip ${agentSubsFilter.status === 'فعال' ? 'active' : ''}" onclick="setAgentSubsFilter('status', 'فعال')">🟢 فعال</span>
+                <span class="chip ${agentSubsFilter.status === 'غير فعال' ? 'active' : ''}" onclick="setAgentSubsFilter('status', 'غير فعال')">🔴 غير فعال</span>
+              </div>
+
+              <!-- Search Input for Subscribers -->
               <div class="search-box" style="position: relative; display: flex; align-items: center;">
                 <span class="search-icon">🔍</span>
-                <input type="text" id="agent-subs-search-input" placeholder="بحث باسم المشترك، الهاتف، الجهاز..." value="${escapeHtml(agentSubsSearch)}" oninput="onAgentSubsSearchInput(this.value)">
+                <input type="text" id="agent-subs-search-input" placeholder="بحث بالاسم، الهاتف، الجهاز..." value="${escapeHtml(agentSubsSearch)}" oninput="onAgentSubsSearchInput(this.value)">
                 ${agentSubsSearch ? `<button type="button" onclick="onAgentSubsSearchInput('')" style="position: absolute; left: 10px; background: none; border: none; cursor: pointer; color: var(--muted); font-size: 0.9rem; padding: 2px 6px;" title="إلغاء البحث">✕</button>` : ''}
               </div>
             </div>
@@ -3219,15 +3354,18 @@
                   <th>نوع البيع</th>
                   <th>فترة الاشتراك</th>
                   <th>حالة الاشتراك</th>
+                  <th>من فعّل الاشتراك</th>
                   <th>الدفع</th>
                   <th style="text-align: center;">إجراءات / تجديد</th>
                 </tr>
               </thead>
               <tbody>
-                ${filteredSubs.length === 0 ? `<tr><td colspan="7" style="text-align: center; color: var(--muted); padding: 25px;">لا يوجد مشتركون مطابقون للبحث</td></tr>` : 
+                ${filteredSubs.length === 0 ? `<tr><td colspan="8" style="text-align: center; color: var(--muted); padding: 30px;">لا يوجد مشتركون مطابقون للفلتر أو البحث المحدد</td></tr>` : 
                   filteredSubs.map(sub => {
-                    const debtStatus = window.getSubscriberMainDebtStatus ? window.getSubscriberMainDebtStatus(sub, data, agentName) : { html: '-' };
-                    const subTypeLabel = window.getSubscriberTypeLabel ? window.getSubscriberTypeLabel(sub, data.sales) : (sub.subscriptionType || '1 شهر');
+                    const isActive = (sub.activeStatus === 'فعال');
+                    const debtStatus = isActive ? (sub.debtStatus || (window.getSubscriberMainDebtStatus ? window.getSubscriberMainDebtStatus(sub, data, agentName) : { html: '-' })) : { html: '<span style="color: var(--muted);">-</span>' };
+                    const activator = isActive ? (sub.activator || (window.getSubscriberActivator ? window.getSubscriberActivator(sub, data, agentName) : { html: '-' })) : { html: '<span style="color: var(--muted);">-</span>' };
+                    const subTypeLabel = isActive ? (window.getSubscriberTypeLabel ? window.getSubscriberTypeLabel(sub, data.sales) : (sub.subscriptionType || '1 شهر')) : '';
                     return `
                     <tr>
                       <td>
@@ -3236,9 +3374,10 @@
                       </td>
                       <td style="font-family: monospace; font-size: 0.84rem;"><span style="cursor: pointer; color: var(--green); text-decoration: underline; font-weight: 700;" onclick="showDeviceBarcodeModal('${escapeHtml(sub.deviceNumber)}')" title="انقر لعرض QR Code">${escapeHtml(sub.deviceNumber)}</span></td>
                       <td>
+                        ${subTypeLabel ? `
                         <span class="badge" style="font-weight: 700; font-size: 0.82rem; background: rgba(59, 130, 246, 0.1); color: #2563eb; border: 1px solid rgba(59, 130, 246, 0.25); padding: 3px 9px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">
                           📅 ${escapeHtml(subTypeLabel)}
-                        </span>
+                        </span>` : `<span style="color: var(--muted);">-</span>`}
                       </td>
                       <td>
                         <div class="cell-date-range" style="direction: ltr;">
@@ -3250,6 +3389,9 @@
                         <span class="badge ${sub.activeStatus === 'فعال' ? 'badge-success' : 'badge-danger'}">
                           ${escapeHtml(sub.activeStatus)}
                         </span>
+                      </td>
+                      <td>
+                        ${activator.html}
                       </td>
                       <td>
                         ${debtStatus.html}

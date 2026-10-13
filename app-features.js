@@ -1334,6 +1334,9 @@
       sub.activeStatus = 'فعال';
       sub.isActivated = true;
       sub.lastActivatedAt = new Date().toISOString();
+      sub.activatedBy = 'المركز الرئيسي';
+      sub.activatedByType = 'hq';
+      sub.requestedByAgent = false;
 
       // 2. Create new sale record
       const saleCode = (typeof window.generateSaleCode === 'function') ? window.generateSaleCode() : ('SR-' + Math.floor(10000 + Math.random() * 90000));
@@ -1549,7 +1552,10 @@
             status,
             activeStatus: status,
             paymentStatus,
-            paymentMethod: paymentStatus === 'مدفوع' ? 'نقد' : 'دين'
+            paymentMethod: paymentStatus === 'مدفوع' ? 'نقد' : 'دين',
+            activatedBy: 'المركز الرئيسي',
+            activatedByType: 'hq',
+            requestedByAgent: false
           });
         }
 
