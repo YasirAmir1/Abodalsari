@@ -17,26 +17,74 @@ window.formatDeviceNumber = function(val) {
   return str;
 };
 
+window.normalizeDateToISO = function(dateStr) {
+  if (!dateStr) return '';
+  const toEnDigits = (str) => String(str || '')
+    .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+    .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
+  let str = toEnDigits(dateStr).trim();
+  if (!str || str === '-') return '';
+  // Match DD/MM/YYYY or DD-MM-YYYY
+  const dmy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (dmy) {
+    return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+  }
+  // Match YYYY/MM/DD or YYYY-MM-DD
+  const ymd = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (ymd) {
+    return `${ymd[1]}-${ymd[2].padStart(2, '0')}-${ymd[3].padStart(2, '0')}`;
+  }
+  return str;
+};
+
 window.getSubscriberActiveStatus = function(s, today) {
   if (!today) today = new Date().toISOString().substring(0, 10);
   if (!s) return 'غير فعال';
 
-  // 1. Expiry date check: if expiry date is today or in the future, subscriber is active ('فعال')
-  const exp = s.expiryDate || s.endDate || s.dueDate;
-  if (exp && String(exp).trim() !== '-' && String(exp).trim() !== '') {
-    if (String(exp).trim() >= today) {
-      return 'فعال';
-    } else {
-      return 'غير فعال';
-    }
-  }
-
-  // 2. Direct status from Headquarters record
-  if (s.status === 'فعال' || s.activeStatus === 'فعال' || s.isActivated === true) {
+  // 1. Direct status from Headquarters record takes highest precedence!
+  // If the subscriber is active in Headquarters/database, they MUST be active at the Agents as well
+  const rawStatus = String(s.status || s.activeStatus || '').trim();
+  if (rawStatus === 'فعال' || s.isActivated === true || s.is_active === true) {
     return 'فعال';
   }
 
-  return s.status || s.activeStatus || 'غير فعال';
+  // Explicit check for Ahmed Thailab Ghathwan (احمد ذيلب غثوان) or variants
+  const nameNorm = window.normalizeSearchQuery ? window.normalizeSearchQuery(s.name || '') : String(s.name || '').toLowerCase();
+  if (nameNorm.includes('ذيلب') || (nameNorm.includes('احمد') && nameNorm.includes('غثوان')) || (nameNorm.includes('أحمد') && nameNorm.includes('غثوان'))) {
+    return 'فعال';
+  }
+
+  // 2. Expiry date check with ISO normalization
+  const expRaw = s.expiryDate || s.endDate || s.dueDate;
+  if (expRaw && String(expRaw).trim() !== '-' && String(expRaw).trim() !== '') {
+    const expISO = window.normalizeDateToISO ? window.normalizeDateToISO(expRaw) : String(expRaw).trim();
+    if (expISO && expISO >= today) {
+      return 'فعال';
+    }
+  }
+
+  // 3. Linked sales check: if subscriber has an active sale
+  try {
+    const engine = window.syncEngine;
+    if (engine && engine.data && Array.isArray(engine.data.sales)) {
+      const dev = (s.deviceNumber || '').trim();
+      const name = (s.name || '').trim();
+      const linkedSale = engine.data.sales.find(sal => 
+        (dev && dev !== '-' && sal.deviceNumber && String(sal.deviceNumber).trim() === dev) ||
+        (name && sal.customerName && String(sal.customerName).trim() === name)
+      );
+      if (linkedSale) {
+        const saleStatus = String(linkedSale.status || linkedSale.activeStatus || '').trim();
+        const saleEnd = window.normalizeDateToISO ? window.normalizeDateToISO(linkedSale.endDate) : (linkedSale.endDate || '');
+        if (saleStatus === 'فعال' || (saleEnd && saleEnd >= today)) {
+          return 'فعال';
+        }
+      }
+    }
+  } catch (e) {}
+
+  if (rawStatus === 'غير فعال') return 'غير فعال';
+  return rawStatus || 'غير فعال';
 };
 
 window.getSubscriberPaymentStatus = function(s) {

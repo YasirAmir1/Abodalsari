@@ -2786,7 +2786,15 @@
     const today = new Date().toISOString().substring(0, 10);
     const isSoundEnabled = window.isAgentSoundEnabled ? window.isAgentSoundEnabled() : true;
 
-    const allMySales = (data.sales || []).filter(s => s.seller === agentName || s.agentName === agentName);
+    const allMySales = (data.sales || []).filter(s => 
+      s.seller === agentName || 
+      s.agentName === agentName ||
+      s.seller === user.displayName || 
+      s.seller === user.username ||
+      s.agentCode === user.agentCode ||
+      (user.agentCode && s.seller && s.seller.includes(user.agentCode)) ||
+      (typeof window.resolveAgentName === 'function' && window.resolveAgentName(s) === agentName)
+    );
     const myDebts = (data.debts || []).filter(d => (d.seller === agentName || (d.customerName && d.customerName.includes(agentName))) && d.remainingAmount > 0);
     const mySubmissions = (data.agentSubmissions || []).filter(s => s.seller === agentName || s.agentName === agentName || s.submittedBy === user.uid);
     const allMySubscribers = (data.subscribers || []).filter(s => 
@@ -2795,12 +2803,81 @@
       s.owner === user.agentCode ||
       s.agentName === agentName ||
       s.seller === agentName ||
-      (user.agentCode && s.owner && s.owner.includes(user.agentCode))
+      (user.agentCode && s.owner && s.owner.includes(user.agentCode)) ||
+      (typeof window.resolveAgentName === 'function' && window.resolveAgentName(s) === agentName)
     );
 
-    // Apply agent filters
+    // Harmonize subscriber status identical to Headquarters
+    allMySubscribers.forEach(s => {
+      const activeStatus = window.getSubscriberActiveStatus ? window.getSubscriberActiveStatus(s, today) : (s.status || (s.expiryDate && s.expiryDate >= today ? 'فعال' : 'غير فعال'));
+      s.activeStatus = activeStatus;
+      s.status = activeStatus;
+    });
+
+    // Ensure all active customers registered to this agent are present in sales history (سجل عملياتك ومبيعاتك للزبائن)
+    allMySubscribers.forEach(sub => {
+      const activeStatus = sub.activeStatus || (window.getSubscriberActiveStatus ? window.getSubscriberActiveStatus(sub, today) : sub.status);
+      if (activeStatus !== 'فعال') return;
+
+      const cleanDev = String(sub.deviceNumber || '').trim();
+      const cleanName = String(sub.name || '').trim();
+
+      const existingSaleIndex = allMySales.findIndex(s => {
+        const sDev = String(s.deviceNumber || '').trim();
+        const sName = String(s.customerName || '').trim();
+        return (cleanDev && cleanDev !== '-' && sDev && sDev === cleanDev) ||
+               (cleanName && sName && sName === cleanName) ||
+               (sub.saleId && s.id === sub.saleId) ||
+               (s.subscriberId && s.subscriberId === sub.id);
+      });
+
+      const subType = window.getSubscriberTypeLabel ? window.getSubscriberTypeLabel(sub, data.sales) : (sub.subscriptionType || '1 شهر');
+
+      if (existingSaleIndex >= 0) {
+        allMySales[existingSaleIndex].activeStatus = 'فعال';
+        allMySales[existingSaleIndex].status = 'فعال';
+        if (!allMySales[existingSaleIndex].subscriptionType || allMySales[existingSaleIndex].subscriptionType === 'اشتراك') {
+          allMySales[existingSaleIndex].subscriptionType = subType;
+        }
+        if (!allMySales[existingSaleIndex].startDate && sub.activationDate) {
+          allMySales[existingSaleIndex].startDate = sub.activationDate;
+        }
+        if (!allMySales[existingSaleIndex].endDate && sub.expiryDate) {
+          allMySales[existingSaleIndex].endDate = sub.expiryDate;
+        }
+      } else {
+        const debtStatus = window.getSubscriberMainDebtStatus ? window.getSubscriberMainDebtStatus(sub, data, agentName) : null;
+        const isCash = sub.paymentMethod === 'نقد' || sub.paymentStatus === 'نقد' || sub.paymentStatus === 'تم التسديد' || sub.paymentStatus === 'مدفوع' || (debtStatus && debtStatus.isPaid);
+
+        const syntheticSale = {
+          id: sub.saleId || ('sale-sub-' + (sub.id || Math.random().toString(36).substring(2, 9))),
+          code: sub.code || ('INV-' + (cleanDev ? cleanDev.slice(-4) : (sub.id ? String(sub.id).slice(-4) : '0000'))),
+          customerName: sub.name,
+          customerPhone: sub.phone || '',
+          deviceNumber: sub.deviceNumber || '',
+          saleType: sub.saleType || 'اشتراك',
+          subscriptionType: subType,
+          startDate: sub.activationDate || sub.startDate || today,
+          endDate: sub.expiryDate || sub.endDate || '-',
+          price: Number(sub.price) || 25000,
+          seller: agentName,
+          agentName: agentName,
+          agentCode: user.agentCode || '',
+          paymentMethod: isCash ? 'نقد' : 'دين',
+          paymentStatus: isCash ? 'تم التسديد' : 'دين',
+          agentPaid: isCash ? (Number(sub.price) || 25000) : 0,
+          status: 'فعال',
+          activeStatus: 'فعال',
+          isSynthesizedFromSubscriber: true,
+          createdAt: sub.activationDate || sub.createdAt || new Date().toISOString()
+        };
+        allMySales.push(syntheticSale);
+      }
+    });
+
+    // Apply agent filters to sales
     let filteredSales = allMySales.map(s => {
-      const isActive = (s.endDate && s.endDate >= today) || s.status === 'فعال' || s.activeStatus === 'فعال';
+      const isActive = (s.activeStatus === 'فعال' || s.status === 'فعال' || (s.endDate && s.endDate >= today));
       const activeStatus = isActive ? 'فعال' : 'غير فعال';
       return { ...s, activeStatus: activeStatus, status: activeStatus };
     });
@@ -3150,6 +3227,7 @@
                 ${filteredSubs.length === 0 ? `<tr><td colspan="7" style="text-align: center; color: var(--muted); padding: 25px;">لا يوجد مشتركون مطابقون للبحث</td></tr>` : 
                   filteredSubs.map(sub => {
                     const debtStatus = window.getSubscriberMainDebtStatus ? window.getSubscriberMainDebtStatus(sub, data, agentName) : { html: '-' };
+                    const subTypeLabel = window.getSubscriberTypeLabel ? window.getSubscriberTypeLabel(sub, data.sales) : (sub.subscriptionType || '1 شهر');
                     return `
                     <tr>
                       <td>
@@ -3157,7 +3235,11 @@
                         <div class="cell-subtitle" style="direction: ltr; text-align: right;">${escapeHtml(sub.phone || '-')}</div>
                       </td>
                       <td style="font-family: monospace; font-size: 0.84rem;"><span style="cursor: pointer; color: var(--green); text-decoration: underline; font-weight: 700;" onclick="showDeviceBarcodeModal('${escapeHtml(sub.deviceNumber)}')" title="انقر لعرض QR Code">${escapeHtml(sub.deviceNumber)}</span></td>
-                      <td>${escapeHtml(sub.saleType || 'اشتراك')}</td>
+                      <td>
+                        <span class="badge" style="font-weight: 700; font-size: 0.82rem; background: rgba(59, 130, 246, 0.1); color: #2563eb; border: 1px solid rgba(59, 130, 246, 0.25); padding: 3px 9px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">
+                          📅 ${escapeHtml(subTypeLabel)}
+                        </span>
+                      </td>
                       <td>
                         <div class="cell-date-range" style="direction: ltr;">
                           <span class="cell-date-from">بدء: ${escapeHtml(sub.activationDate || '-')}</span>
