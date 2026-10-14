@@ -516,8 +516,52 @@ class SariSyncEngine {
     this.saveQueue = [];
     this.isSaving = false;
     this.purgeLocalStorageOfDeletedAgents();
+    this.loadQuotaState();
     this.data = this.loadLocal();
     this.initFirebase();
+  }
+
+  loadQuotaState() {
+    try {
+      const exceeded = localStorage.getItem('sari_firestore_quota_exceeded');
+      const date = localStorage.getItem('sari_firestore_quota_date');
+      const today = new Date().toISOString().substring(0, 10);
+      if (exceeded === 'true' && date === today) {
+        window.firestoreQuotaExceeded = true;
+      } else {
+        window.firestoreQuotaExceeded = false;
+      }
+    } catch (e) {
+      window.firestoreQuotaExceeded = false;
+    }
+  }
+
+  async clearAllData() {
+    this.data = {
+      subscribers: [],
+      sales: [],
+      agents: [],
+      users: [],
+      codes: [],
+      debts: [],
+      agentSettlements: [],
+      agentSubmissions: [],
+      notifications: [],
+      pricing: []
+    };
+    this.saveLocal();
+    window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'all' } }));
+    
+    // Attempt to push empty data if not over quota
+    if (!window.firestoreQuotaExceeded && this.db && window.isFirebaseConfigured()) {
+       try {
+         await this.pushToFirestore('subscribers', []);
+         await this.pushToFirestore('sales', []);
+         // ... other collections
+       } catch (e) {
+          console.warn('Error clearing Firestore data:', e);
+       }
+    }
   }
 
   isAdminUser(user = this.currentUser) {
@@ -526,6 +570,16 @@ class SariSyncEngine {
     }
     if (!user) return true;
     return window.isSystemAdmin(user);
+  }
+
+  isQuotaError(e) {
+    if (!e) return false;
+    const msg = String(e.message || '').toLowerCase();
+    const code = String(e.code || '').toLowerCase();
+    return code === 'resource-exhausted' || 
+           msg.includes('quota') || 
+           msg.includes('resource-exhausted') ||
+           msg.includes('daily write units');
   }
 
   purgeLocalStorageOfDeletedAgents() {
@@ -1387,7 +1441,7 @@ class SariSyncEngine {
     await this.commitData('users', users);
 
     // Direct Firestore document writes to ensure immediate consistency
-    if (this.db && window.isFirebaseConfigured && window.isFirebaseConfigured()) {
+    if (!window.firestoreQuotaExceeded && this.db && window.isFirebaseConfigured && window.isFirebaseConfigured()) {
       try {
         const batch = this.db.batch();
         // Top-level collections
@@ -1399,7 +1453,12 @@ class SariSyncEngine {
         batch.set(this.db.collection('appData').doc('users').collection('records').doc(ag.id), userObj, { merge: true });
         await batch.commit();
       } catch (e) {
-        console.warn('Direct Firestore credential batch write error:', e);
+        if (e?.code === 'resource-exhausted' || e?.message?.includes('quota') || e?.message?.includes('Quota')) {
+          markFirestoreQuotaExceeded();
+          console.warn('Firestore quota limit reached. Running in local persistence mode.');
+        } else {
+          console.warn('Direct Firestore credential batch write error:', e);
+        }
       }
     }
 
@@ -1450,7 +1509,7 @@ class SariSyncEngine {
 
   // Real-time Central Firestore synchronization (Automatic Two-Way Propagation across all devices)
   startRealtimeSync() {
-    if (!this.db) return;
+    if (window.firestoreQuotaExceeded || !this.db) return;
     this.stopRealtimeSync();
 
     const user = this.currentUser || { role: 'admin' };
@@ -1643,7 +1702,7 @@ class SariSyncEngine {
         await batch.commit();
       }
     } catch (e) {
-      if (e?.code === 'resource-exhausted' || e?.message?.includes('quota') || e?.message?.includes('Quota')) {
+      if (this.isQuotaError(e)) {
         markFirestoreQuotaExceeded();
         console.warn('Firestore quota limit reached. Running in local persistence mode.');
       } else {
@@ -1653,7 +1712,7 @@ class SariSyncEngine {
   }
 
   async deleteFirestoreSubmission(submittedBy, subId) {
-    if (!this.db || !window.isFirebaseConfigured() || !subId) return;
+    if (window.firestoreQuotaExceeded || !this.db || !window.isFirebaseConfigured() || !subId) return;
     try {
       const uids = new Set([
         submittedBy,
@@ -1675,7 +1734,12 @@ class SariSyncEngine {
 
       await Promise.all(deletePromises);
     } catch (e) {
-      console.warn('Error deleting submission from Firestore:', e);
+      if (e?.code === 'resource-exhausted' || e?.message?.includes('quota') || e?.message?.includes('Quota')) {
+        markFirestoreQuotaExceeded();
+        console.warn('Firestore quota limit reached. Running in local persistence mode.');
+      } else {
+        console.warn('Error deleting submission from Firestore:', e);
+      }
     }
   }
 
@@ -1732,7 +1796,7 @@ class SariSyncEngine {
         }
         await batch.commit();
       } catch (e) {
-        if (e?.code === 'resource-exhausted' || e?.message?.includes('quota') || e?.message?.includes('Quota')) {
+        if (this.isQuotaError(e)) {
           markFirestoreQuotaExceeded();
           console.warn('Firestore quota limit reached during batch commit. Running in local persistence mode.');
         } else {
@@ -1831,7 +1895,7 @@ class SariSyncEngine {
     window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'all' } }));
 
     // 6. Delete completely from Firestore
-    if (this.db && window.isFirebaseConfigured && window.isFirebaseConfigured()) {
+    if (!window.firestoreQuotaExceeded && this.db && window.isFirebaseConfigured && window.isFirebaseConfigured()) {
       try {
         const batch = this.db.batch();
 
@@ -1878,7 +1942,12 @@ class SariSyncEngine {
         await batch.commit();
         console.log(`[FirebaseSync] Subscriber ${subId} (${devNum}) and cascade records permanently deleted from Firestore.`);
       } catch (err) {
-        console.warn('Error deleting subscriber from Firestore:', err);
+        if (this.isQuotaError(err)) {
+          markFirestoreQuotaExceeded();
+          console.warn('Firestore quota limit reached. Running in local persistence mode.');
+        } else {
+          console.warn('Error deleting subscriber from Firestore:', err);
+        }
       }
     }
   }
@@ -1900,7 +1969,7 @@ class SariSyncEngine {
     this.saveLocal();
     window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: collectionName } }));
 
-    if (this.db && window.isFirebaseConfigured()) {
+    if (!window.firestoreQuotaExceeded && this.db && window.isFirebaseConfigured()) {
       try {
         const batch = this.db.batch();
         batch.delete(this.db.collection(collectionName).doc(itemId));
@@ -1910,7 +1979,12 @@ class SariSyncEngine {
         }
         await batch.commit();
       } catch (err) {
-        console.warn(`Error deleting item ${itemId} from ${collectionName}:`, err);
+        if (err?.code === 'resource-exhausted' || err?.message?.includes('quota') || err?.message?.includes('Quota')) {
+          markFirestoreQuotaExceeded();
+          console.warn('Firestore quota limit reached. Running in local persistence mode.');
+        } else {
+          console.warn(`Error deleting item ${itemId} from ${collectionName}:`, err);
+        }
       }
     }
   }
@@ -1933,7 +2007,7 @@ class SariSyncEngine {
     this.saveLocal();
     window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: collectionName } }));
 
-    if (this.db && window.isFirebaseConfigured()) {
+    if (!window.firestoreQuotaExceeded && this.db && window.isFirebaseConfigured()) {
       try {
         // Clear from top-level collection
         const snap = await this.db.collection(collectionName).get();
@@ -1958,7 +2032,12 @@ class SariSyncEngine {
           }
         }
       } catch (err) {
-        console.warn(`Error clearing Firestore collection ${collectionName}:`, err);
+        if (err?.code === 'resource-exhausted' || err?.message?.includes('quota') || err?.message?.includes('Quota')) {
+          markFirestoreQuotaExceeded();
+          console.warn('Firestore quota limit reached. Running in local persistence mode.');
+        } else {
+          console.warn(`Error clearing Firestore collection ${collectionName}:`, err);
+        }
       }
     }
   }
@@ -1986,14 +2065,19 @@ class SariSyncEngine {
     window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'notifications' } }));
 
     // Sync to centralized Firestore Notifications collection
-    if (this.db && window.isFirebaseConfigured && window.isFirebaseConfigured()) {
+    if (!window.firestoreQuotaExceeded && this.db && window.isFirebaseConfigured && window.isFirebaseConfigured()) {
       try {
         const docRef = this.db.collection('notifications').doc(id);
         await docRef.set(newNotif, { merge: true });
         const mirrorRef = this.db.collection('appData').doc('notifications').collection('records').doc(id);
         await mirrorRef.set(newNotif, { merge: true }).catch(() => {});
       } catch (err) {
-        console.warn('Error saving broadcast notification to Firestore:', err);
+        if (err?.code === 'resource-exhausted' || err?.message?.includes('quota') || err?.message?.includes('Quota')) {
+          markFirestoreQuotaExceeded();
+          console.warn('Firestore quota limit reached. Running in local persistence mode.');
+        } else {
+          console.warn('Error saving broadcast notification to Firestore:', err);
+        }
       }
     }
     return newNotif;
@@ -2010,33 +2094,44 @@ class SariSyncEngine {
     this.saveLocal();
     window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'notifications' } }));
 
-    if (this.db && window.isFirebaseConfigured && window.isFirebaseConfigured()) {
+    if (!window.firestoreQuotaExceeded && this.db && window.isFirebaseConfigured && window.isFirebaseConfigured()) {
       try {
         await this.db.collection('notifications').doc(notifId).delete().catch(() => {});
         await this.db.collection('appData').doc('notifications').collection('records').doc(notifId).delete().catch(() => {});
       } catch (err) {
-        console.warn('Error deleting notification from Firestore:', err);
+        if (err?.code === 'resource-exhausted' || err?.message?.includes('quota') || err?.message?.includes('Quota')) {
+          markFirestoreQuotaExceeded();
+          console.warn('Firestore quota limit reached. Running in local persistence mode.');
+        } else {
+          console.warn('Error deleting notification from Firestore:', err);
+        }
       }
     }
   }
 
   // Synchronize a specific subscriber update across all client sessions and ensure consistency
   async syncAllSubscribers(updatedSubscribers) {
-    if (!this.db || !window.isFirebaseConfigured()) return;
-    try {
-      // 1. Commit to Firestore
-      await this.pushToFirestore('subscribers', updatedSubscribers);
-      
-      // 2. Update local data and broadcast update to all active sessions
-      this.data.subscribers = updatedSubscribers;
-      this.saveLocal();
-      window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'subscribers' } }));
-      
-      console.log('Subscribers synced and broadcasted successfully.');
-    } catch (e) {
-      console.error('Error syncing subscribers:', e);
-      throw e;
+    if (!window.firestoreQuotaExceeded && this.db && window.isFirebaseConfigured()) {
+      try {
+        // 1. Commit to Firestore
+        await this.pushToFirestore('subscribers', updatedSubscribers);
+      } catch (e) {
+        if (e?.code === 'resource-exhausted' || e?.message?.includes('quota') || e?.message?.includes('Quota')) {
+          markFirestoreQuotaExceeded();
+          console.warn('Firestore quota limit reached. Running in local persistence mode.');
+        } else {
+          console.error('Error syncing subscribers:', e);
+          throw e;
+        }
+      }
     }
+      
+    // 2. Update local data and broadcast update to all active sessions
+    this.data.subscribers = updatedSubscribers;
+    this.saveLocal();
+    window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'subscribers' } }));
+      
+    console.log('Subscribers synced and broadcasted successfully.');
   }
 }
 

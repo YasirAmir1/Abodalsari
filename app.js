@@ -1039,7 +1039,10 @@
             <h1>سجل المبيعات والاشتراكات</h1>
             <p class="subtitle">تسجيل المبيعات، تحديث الدفعات، وربط الواتساب مع المشتركين</p>
           </div>
-          <div class="header-actions">
+          <div class="header-actions" style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button class="btn btn-outline-danger" onclick="if(typeof confirmDeleteAllSubscribers === 'function') confirmDeleteAllSubscribers();" title="حذف كافة المبيعات والمشتركين للبدء من جديد">
+              <span>🗑️</span> <span>تفريغ وحذف الكل</span>
+            </button>
             <button class="btn btn-primary" onclick="openSaleModal()">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               <span>تسجيل بيع جديد</span>

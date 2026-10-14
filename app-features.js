@@ -1154,6 +1154,7 @@
   };
 
   window.confirmDeactivateSubscriber = function(subId) {
+    console.log("confirmDeactivateSubscriber called for:", subId);
     const data = getData();
     const subscriber = (data.subscribers || []).find(s => s.id === subId);
     if (!subscriber) {
