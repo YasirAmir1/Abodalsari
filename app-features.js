@@ -669,7 +669,7 @@
           '<div class="action-btns" style="justify-content: center; gap: 4px; display: inline-flex; align-items: center;">' +
             (waLink ? '<a href="' + waLink + '" target="_blank" class="icon-btn btn-whatsapp" title="مراسلة عبر واتساب">💬</a>' : '') +
             '<button class="icon-btn" onclick="openSubscriberModal(\'' + s.id + '\')" title="تعديل بيانات المشترك">✏️</button>' +
-            '<button type="button" class="icon-btn btn-deactivate" onclick="confirmDeactivateSubscriber(' + JSON.stringify(s.id) + ')" title="إلغاء تفعيل اشتراك المشترك وتفريغ التواريخ والبيانات (زر خطأ ❌)" aria-label="إلغاء تفعيل اشتراك المشترك" style="color: #ef4444; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 3px 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;"><span style="font-size: 0.92rem; font-weight: 900; line-height: 1;">❌</span></button>' +
+            '<button type="button" class="icon-btn btn-deactivate" onclick="window.confirmDeactivateSubscriber(' + JSON.stringify(s.id) + ')" title="إلغاء تفعيل اشتراك المشترك وتفريغ التواريخ والبيانات (زر خطأ ❌)" aria-label="إلغاء تفعيل اشتراك المشترك" style="color: #ef4444; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 3px 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;"><span style="font-size: 0.92rem; font-weight: 900; line-height: 1;">❌</span></button>' +
             '<button class="icon-btn btn-del" onclick="deleteSubscriber(\'' + s.id + '\')" title="حذف المشترك نهائياً">🗑️</button>' +
           '</div>' +
         '</td>' +
