@@ -634,7 +634,7 @@
                           ownerClean === 'hq';
 
       // زر التجديد يظهر فقط لمشتركي المركز الرئيسي وغير الفعالين، ويُخفى تماماً من أمام مشتركي الوكلاء
-      const showRenewalBtn = isMainOwner && s.status !== 'فعال';
+      const showRenewalBtn = isMainOwner;
       
       return '<tr style="' + rowHighlightStyle + '">' +
         '<td>' +
@@ -669,7 +669,7 @@
           '<div class="action-btns" style="justify-content: center; gap: 4px; display: inline-flex; align-items: center;">' +
             (waLink ? '<a href="' + waLink + '" target="_blank" class="icon-btn btn-whatsapp" title="مراسلة عبر واتساب">💬</a>' : '') +
             '<button class="icon-btn" onclick="openSubscriberModal(\'' + s.id + '\')" title="تعديل بيانات المشترك">✏️</button>' +
-            '<button class="icon-btn btn-deactivate" onclick="confirmDeactivateSubscriber(\'' + s.id + '\')" title="إلغاء تفعيل الاشتراك وتفريغ البيانات (إطفاء)" aria-label="إلغاء تفعيل الاشتراك"><span style="font-size: 0.95rem; line-height: 1;" title="إلغاء التفعيل">🚫</span></button>' +
+            '<button type="button" class="icon-btn btn-deactivate" onclick="confirmDeactivateSubscriber(' + JSON.stringify(s.id) + ')" title="إلغاء تفعيل اشتراك المشترك وتفريغ التواريخ والبيانات (زر خطأ ❌)" aria-label="إلغاء تفعيل اشتراك المشترك" style="color: #ef4444; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 3px 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;"><span style="font-size: 0.92rem; font-weight: 900; line-height: 1;">❌</span></button>' +
             '<button class="icon-btn btn-del" onclick="deleteSubscriber(\'' + s.id + '\')" title="حذف المشترك نهائياً">🗑️</button>' +
           '</div>' +
         '</td>' +
@@ -692,23 +692,34 @@
 
     // Dynamic status check - identical across Headquarters and Agents
     subs.forEach(s => {
-      s.status = typeof window.getSubscriberActiveStatus === 'function' ? window.getSubscriberActiveStatus(s, today) : ((s.expiryDate && s.expiryDate >= today) || s.status === 'فعال' ? 'فعال' : 'غير فعال');
+      s.status = typeof window.getSubscriberActiveStatus === "function" ? window.getSubscriberActiveStatus(s, today) : ((s.expiryDate && s.expiryDate >= today) || s.status === "فعال" ? "فعال" : "غير فعال");
       s.activeStatus = s.status;
+      if (s.status === "غير فعال" || s.deactivated === true || (!s.activationDate && !s.expiryDate)) {
+        s.paymentStatus = "";
+        s.paymentMethod = "";
+        s.price = 0;
+        s.paidAmount = 0;
+        s.remainingAmount = 0;
+      }
     });
 
     function checkSubscriberPaid(s) {
-      // 1. Direct saved payment status on subscriber takes precedence (taken from the saved modal)
+      // If inactive or deactivated or without dates, keep payment data completely empty
+      if (s.status === "غير فعال" || s.deactivated === true || (!s.activationDate && !s.expiryDate)) {
+        return "";
+      }
+      // 1. Direct saved payment status on subscriber takes precedence
       if (s.paymentStatus) {
-        if (s.paymentStatus === 'مدفوع' || s.paymentStatus === 'نقد' || s.paymentStatus === 'تم التسديد') {
-          return 'مدفوع';
+        if (s.paymentStatus === "مدفوع" || s.paymentStatus === "نقد" || s.paymentStatus === "تم التسديد") {
+          return "مدفوع";
         }
-        if (s.paymentStatus === 'دين' || s.paymentStatus === 'غير مدفوع') {
-          return 'دين';
+        if (s.paymentStatus === "دين" || s.paymentStatus === "غير مدفوع") {
+          return "دين";
         }
       }
       if (s.paymentMethod) {
-        if (s.paymentMethod === 'نقد') return 'مدفوع';
-        if (s.paymentMethod === 'دين') return 'دين';
+        if (s.paymentMethod === "نقد") return "مدفوع";
+        if (s.paymentMethod === "دين") return "دين";
       }
 
       // 2. Check the most recent sale for this subscriber / device
@@ -717,30 +728,33 @@
         .sort((a, b) => new Date(b.createdAt || b.startDate || 0).getTime() - new Date(a.createdAt || a.startDate || 0).getTime());
       if (subSales.length > 0) {
         const latestSale = subSales[0];
-        if (latestSale.paymentMethod === 'نقد' || latestSale.paymentStatus === 'نقد' || latestSale.paymentStatus === 'تم التسديد') {
-          return 'مدفوع';
+        if (latestSale.paymentMethod === "نقد" || latestSale.paymentStatus === "نقد" || latestSale.paymentStatus === "تم التسديد") {
+          return "مدفوع";
         }
-        if (latestSale.paymentMethod === 'دين' || latestSale.paymentStatus === 'دين' || latestSale.paymentStatus === 'عليه دين') {
-          return 'دين';
+        if (latestSale.paymentMethod === "دين" || latestSale.paymentStatus === "دين" || latestSale.paymentStatus === "عليه دين") {
+          return "دين";
         }
       }
 
       // 3. Check outstanding debts
       const hasDebt = debts.some(d => ((d.customerName && d.customerName.includes(s.name)) || (d.saleId && sales.find(sal => sal.id === d.saleId && sal.deviceNumber === s.deviceNumber))) && Number(d.remainingAmount) > 0);
-      if (hasDebt) return 'دين';
+      if (hasDebt) return "دين";
 
       if (!s.activationDate || !s.expiryDate || !s.status) {
-        return '';
-      }
-      if (s.status === 'غير فعال') {
-        return 'غير مدفوع';
+        return "";
       }
 
-      return 'مدفوع';
+      if (s.status === "غير فعال") {
+        return "";
+      }
+
+      return "مدفوع";
     }
 
     subs.forEach(s => {
-      s.paymentStatus = checkSubscriberPaid(s);
+      if (s.status !== "غير فعال" && !s.deactivated && (s.activationDate || s.expiryDate)) {
+        s.paymentStatus = checkSubscriberPaid(s);
+      }
     });
 
     // Calculate subscribers whose subscriptions expire within 7 days
@@ -1143,59 +1157,73 @@
     const data = getData();
     const subscriber = (data.subscribers || []).find(s => s.id === subId);
     if (!subscriber) {
-      window.showToast('المشترك غير موجود', 'error');
+      window.showToast("المشترك غير موجود", "error");
       return;
     }
-    const subName = subscriber.name || 'المشترك';
-    const devNum = subscriber.deviceNumber ? ` (رقم الجهاز: ${subscriber.deviceNumber})` : '';
 
-    const title = 'تأكيد إلغاء تفعيل اشتراك المشترك';
-    const message = `هل أنت متأكد من رغبتك في إلغاء تفعيل اشتراك المشترك "${subName}"${devNum}؟
+    const subName = subscriber.name || "المشترك";
+    const devNum = subscriber.deviceNumber || "غير محدد";
+    const currentStatus = subscriber.status || "غير محدد";
+    const subType = subscriber.subscriptionType || "-";
+    const expiry = subscriber.expiryDate || subscriber.endDate || "-";
 
-⚠️ سيتم تفريغ تواريخ بدء وانتهاء الاشتراك، وتفريغ بيانات الدفع والمبالغ المالية، وإرجاع حالة الاشتراك إلى "غير فعال".`;
+    const modalContainer = document.getElementById("modal-container");
+    if (!modalContainer) return;
 
-    if (typeof window.showConfirmModal === 'function') {
-      window.showConfirmModal(
-        title,
-        message,
-        async () => {
-          await window.executeDeactivateSubscriber(subId);
-        },
-        'تأكيد إلغاء التفعيل',
-        'تراجع',
-        true
-      );
-    } else {
-      const modalContainer = document.getElementById('modal-container');
-      if (!modalContainer) return;
-      modalContainer.innerHTML = `
-        <div class="modal-overlay active" style="z-index: 9999;" onclick="if (event.target === this) window.closeModal()">
-          <div class="modal-dialog" style="max-width: 480px; text-align: right; direction: rtl;" onclick="event.stopPropagation()">
-            <div class="modal-header" style="border-bottom: 1px solid var(--line); padding-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
-              <div style="display: flex; align-items: center; gap: 10px;">
-                <span style="font-size: 1.5rem; color: #dc2626;">⚠️</span>
-                <h3 style="margin: 0; font-size: 1.15rem; color: var(--text);">${escapeHtml(title)}</h3>
+    modalContainer.innerHTML = `
+      <div class="modal-overlay active" style="z-index: 9999;" onclick="if (event.target === this) window.closeModal()">
+        <div class="modal-dialog" style="max-width: 490px; width: 95%; text-align: right; direction: rtl; box-shadow: 0 20px 45px rgba(0,0,0,0.3); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 12px; overflow: hidden;" onclick="event.stopPropagation()">
+          <div class="modal-header" style="background: rgba(239, 68, 68, 0.08); border-bottom: 1px solid rgba(239, 68, 68, 0.2); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 1.4rem; color: #dc2626;">⚠️</span>
+              <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #b91c1c;">تأكيد إلغاء تفعيل اشتراك المشترك</h3>
+            </div>
+            <button type="button" class="modal-close" onclick="window.closeModal()" style="background: none; border: none; font-size: 1.3rem; cursor: pointer; color: var(--muted); padding: 4px;">✕</button>
+          </div>
+          <div class="modal-body" style="padding: 18px 20px; color: var(--text);">
+            <!-- Subscriber Summary Card -->
+            <div style="background: var(--surface-alt, #f8fafc); border: 1px solid var(--line, #e2e8f0); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-size: 0.82rem; color: var(--muted, #64748b);">اسم المشترك:</span>
+                <strong style="font-size: 1rem; color: var(--text, #0f172a);">${escapeHtml(subName)}</strong>
               </div>
-              <button type="button" class="modal-close" onclick="window.closeModal()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--muted);">✕</button>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-size: 0.82rem; color: var(--muted, #64748b);">رقم الجهاز:</span>
+                <span style="font-family: monospace; font-weight: 700; color: var(--primary, #2563eb);">${escapeHtml(devNum)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 0.82rem; color: var(--muted, #64748b);">الحالة الحالية:</span>
+                <span class="badge ${currentStatus === "فعال" ? "badge-success" : "badge-neutral"}" style="font-size: 0.78rem;">${escapeHtml(currentStatus)}</span>
+              </div>
             </div>
-            <div class="modal-body" style="padding: 18px 0; color: var(--text); font-size: 0.95rem; line-height: 1.6; white-space: pre-line;">
-              ${escapeHtml(message)}
-            </div>
-            <div class="modal-footer" style="border-top: 1px solid var(--line); padding-top: 14px; display: flex; gap: 10px; justify-content: flex-end;">
-              <button type="button" class="btn btn-secondary" onclick="window.closeModal()" style="min-width: 90px;">تراجع</button>
-              <button type="button" id="custom-confirm-btn" class="btn btn-danger" style="min-width: 140px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; background: #dc2626; color: white;">
-                <span>🚫</span>
-                <span>تأكيد إلغاء التفعيل</span>
-              </button>
+
+            <!-- Danger Warning Message -->
+            <div style="background: rgba(239, 68, 68, 0.08); border-right: 4px solid #ef4444; border-radius: 6px; padding: 12px 14px; margin-bottom: 8px;">
+              <p style="margin: 0 0 8px 0; font-weight: 700; color: #b91c1c; font-size: 0.92rem;">
+                هل أنت متأكد من رغبتك في إطفاء وإلغاء تفعيل اشتراك هذا المشترك؟
+              </p>
+              <ul style="margin: 0; padding-right: 18px; font-size: 0.85rem; color: #7f1d1d; line-height: 1.6;">
+                <li>إرجاع حالة اشتراك المشترك إلى <strong>غير فعال</strong> فوراً.</li>
+                <li>تفريغ ومسح <strong>تواريخ البدء والانتهاء</strong> وتاريخ التفعيل.</li>
+                <li>تفريغ ومسح <strong>بيانات وطرق ومبالغ الدفع</strong> الخاصة بالاشتراك.</li>
+              </ul>
             </div>
           </div>
+          <div class="modal-footer" style="border-top: 1px solid var(--line, #e2e8f0); padding: 12px 20px; display: flex; gap: 10px; justify-content: flex-end; background: var(--surface-alt, #f8fafc);">
+            <button type="button" class="btn btn-secondary" onclick="window.closeModal()" style="min-width: 90px; padding: 8px 16px; font-weight: 600;">تراجع وإلغاء</button>
+            <button type="button" id="confirm-deactivate-btn" class="btn btn-danger" style="min-width: 150px; padding: 8px 18px; font-weight: 700; background: #dc2626; color: #ffffff; border: none; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;">
+              <span>❌</span>
+              <span>تأكيد إلغاء التفعيل وتفريغ البيانات</span>
+            </button>
+          </div>
         </div>
-      `;
-      document.getElementById('custom-confirm-btn').onclick = async () => {
-        window.closeModal();
-        await window.executeDeactivateSubscriber(subId);
-      };
-    }
+      </div>
+    `;
+
+    document.getElementById("confirm-deactivate-btn").onclick = async () => {
+      window.closeModal();
+      await window.executeDeactivateSubscriber(subId);
+    };
   };
 
   window.executeDeactivateSubscriber = async function(id) {
@@ -1204,49 +1232,50 @@
       const subs = data.subscribers || [];
       const subscriber = subs.find(s => s.id === id);
       if (!subscriber) {
-        window.showToast('المشترك غير موجود', 'error');
+        window.showToast("المشترك غير موجود", "error");
         return;
       }
 
       // 1. Reset active status to inactive
-      subscriber.status = 'غير فعال';
-      subscriber.activeStatus = 'غير فعال';
+      subscriber.status = "غير فعال";
+      subscriber.activeStatus = "غير فعال";
       subscriber.isActivated = false;
       subscriber.deactivated = true;
       subscriber.lastDeactivatedAt = new Date().toISOString();
 
       // 2. Clear subscription dates
-      subscriber.activationDate = '';
-      subscriber.startDate = '';
-      subscriber.expiryDate = '';
-      subscriber.endDate = '';
-      subscriber.dueDate = '';
-      subscriber.subscriptionType = '';
+      subscriber.activationDate = "";
+      subscriber.startDate = "";
+      subscriber.expiryDate = "";
+      subscriber.endDate = "";
+      subscriber.dueDate = "";
+      subscriber.subscriptionType = "";
+      subscriber.durationMonths = 0;
 
       // 3. Clear payment data
-      subscriber.paymentStatus = '';
-      subscriber.paymentMethod = '';
+      subscriber.paymentStatus = "";
+      subscriber.paymentMethod = "";
       subscriber.price = 0;
       subscriber.paidAmount = 0;
       subscriber.remainingAmount = 0;
 
       data.subscribers = subs;
-      if (getEngine() && typeof getEngine().saveLocal === 'function') {
+      if (getEngine() && typeof getEngine().saveLocal === "function") {
         getEngine().saveLocal();
       }
 
-      window.showToast(`تم إلغاء تفعيل اشتراك (${subscriber.name}) وتفريغ التواريخ والبيانات بنجاح (الحالة: غير فعال)`, 'success');
-
-      if (typeof window.renderSubscribers === 'function') {
-        window.renderSubscribers(document.getElementById('main-content'));
+      window.showToast(`تم إلغاء تفعيل اشتراك (${subscriber.name}) وتفريغ التواريخ والبيانات بنجاح (الحالة: غير فعال)`, "success");
+      
+      if (typeof window.renderSubscribers === "function") {
+        window.renderSubscribers(document.getElementById("main-content"));
       }
 
-      if (getEngine() && typeof getEngine().commitData === 'function') {
-        getEngine().commitData('subscribers', subs).catch(err => console.warn('Sync warning on deactivating subscriber:', err));
+      if (getEngine() && typeof getEngine().commitData === "function") {
+        getEngine().commitData("subscribers", subs).catch(err => console.warn("Sync warning on deactivating subscriber:", err));
       }
     } catch (err) {
-      console.error('Error deactivating subscriber:', err);
-      window.showToast('حدث خطأ أثناء إلغاء تفعيل الاشتراك: ' + (err.message || ''), 'error');
+      console.error("Error deactivating subscriber:", err);
+      window.showToast("حدث خطأ أثناء إلغاء تفعيل الاشتراك: " + (err.message || ""), "error");
     }
   };
 
@@ -1258,6 +1287,7 @@
     }
     return window.executeDeactivateSubscriber(subId);
   };
+
   window.deactivateSubscriberWithConfirm = window.confirmDeactivateSubscriber;
   window.cancelSubscriberSubscription = window.confirmDeactivateSubscriber;
 
@@ -1656,6 +1686,13 @@
       if (typeof window.renderSubscribers === 'function') {
         window.renderSubscribers(document.getElementById('main-content'));
       }
+
+      // Show invoice success modal with WhatsApp sharing for Headquarters renewal
+      setTimeout(() => {
+        if (typeof window.openSaleSuccessModal === 'function') {
+          window.openSaleSuccessModal(newSale);
+        }
+      }, 150);
 
       // Sync to backend asynchronously in background without blocking UI
       getEngine().batchCommitData([

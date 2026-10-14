@@ -164,7 +164,8 @@
   window.showConfirmDialog = showConfirmDialog;
 
   // --- Auth & State Handling ---
-  let currentPage = 'dashboard';
+  window.currentPage = 'dashboard';
+  let currentPage = window.currentPage;
   let salesFilter = { seller: 'all', type: 'all', paymentStatus: 'all', search: '' };
   let subscribersFilter = { owner: 'all', status: 'all', search: '' };
   let selectedBarcodes = new Set();
@@ -260,6 +261,7 @@
 
   // Navigation router
   function navigateTo(page) {
+    window.currentPage = page;
     currentPage = page;
     window.currentView = page;
     const currentUser = (typeof getEngine === 'function' && getEngine().currentUser) || null;
@@ -2284,10 +2286,13 @@
               <div style="font-size: 0.78rem; color: var(--muted); margin-top: 6px;">يمكن مسح هذا الرمز ضوئياً للوصول الفوري لرقم الجهاز وتفاصيل المشترك</div>
             </div>
           </div>
-          <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
-            <div style="display: flex; gap: 8px;">
+          <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
               <button type="button" class="btn btn-secondary" onclick="window.printSaleInvoice('${sale.id}')">🖨️ طباعة الفاتورة</button>
               <button type="button" class="btn btn-secondary" onclick="window.downloadSaleInvoiceImage('${sale.id}')">📥 تحميل صورة الفاتورة</button>
+              <button type="button" class="btn btn-success" onclick="window.shareSaleWhatsAppCard('${sale.id}')" style="background: #25D366; color: white; border: none; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px; cursor: pointer;">
+                <span>💬</span> <span>مشاركة واتساب (البطاقة والصورة)</span>
+              </button>
             </div>
             <button type="button" class="btn btn-primary" onclick="window.closeModal(); navigateTo(currentPage);">تم</button>
           </div>
@@ -2457,6 +2462,185 @@
         document.body.removeChild(container);
       }
     }, 400);
+  };
+
+    window.shareSaleWhatsAppCard = async function(saleId) {
+    const data = getData();
+    const sale = (data.sales || []).find(s => s.id === saleId) || (data.subscribers || []).find(s => s.id === saleId);
+    if (!sale) {
+      showToast("لم يتم العثور على بيانات الفاتورة", "error");
+      return;
+    }
+
+    const customerName = sale.customerName || sale.name || "المشترك";
+    const customerPhone = sale.customerPhone || sale.phone || "";
+    const deviceNumber = sale.deviceNumber || "00";
+    const saleType = sale.saleType || "تجديد اشتراك";
+    const subscriptionType = sale.subscriptionType || "1 شهر";
+    const startDate = sale.startDate || sale.activationDate || new Date().toISOString().substring(0, 10);
+    const endDate = sale.endDate || sale.expiryDate || "-";
+    const price = formatNumber(sale.price || 25000);
+    const paymentStatus = sale.paymentStatus || "تم التسديد";
+
+    showToast("جاري تجهيز وتوليد بطاقة المشترك للمشاركة...", "info");
+
+    const cardEl = document.createElement("div");
+    cardEl.style.position = "fixed";
+    cardEl.style.left = "-9999px";
+    cardEl.style.top = "0";
+    cardEl.style.width = "460px";
+    cardEl.style.background = "#ffffff";
+    cardEl.style.padding = "22px";
+    cardEl.style.fontFamily = "'Cairo', 'Tajawal', system-ui, sans-serif";
+    cardEl.style.direction = "rtl";
+    cardEl.style.color = "#0f172a";
+    cardEl.style.borderRadius = "14px";
+    cardEl.style.border = "2px solid #0284c7";
+    cardEl.style.boxShadow = "0 10px 25px rgba(0,0,0,0.15)";
+
+    cardEl.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0284c7; padding-bottom: 12px; margin-bottom: 14px;">
+        <div>
+          <h2 style="margin: 0; font-size: 1.25rem; font-weight: 800; color: #0284c7; display: flex; align-items: center; gap: 6px;">
+            <span>🛰️</span> <span>مركز الساري للبث الأرضي</span>
+          </h2>
+          <div style="font-size: 0.78rem; color: #64748b; margin-top: 2px; font-weight: 600;">بطاقة اشتراك وتفعيل جهاز معتمد</div>
+        </div>
+        <div style="text-align: left;">
+          <span style="display: inline-block; background: #e0f2fe; color: #0369a1; padding: 4px 10px; border-radius: 6px; font-size: 0.78rem; font-weight: 800; border: 1px solid #bae6fd;">
+            ${escapeHtml(saleType)}
+          </span>
+        </div>
+      </div>
+
+      <div style="background: #f8fafc; border: 1.5px dashed #cbd5e1; border-radius: 10px; padding: 12px; text-align: center; margin-bottom: 14px;">
+        <div style="font-size: 0.76rem; color: #64748b; font-weight: 700; margin-bottom: 4px;">رقم كود الجهاز المعتمد (16 رقماً):</div>
+        <div style="font-family: 'Courier New', Courier, monospace; font-size: 1.22rem; font-weight: 900; letter-spacing: 2px; color: #0f172a; margin-bottom: 10px; direction: ltr;">
+          ${escapeHtml(deviceNumber)}
+        </div>
+        <div style="display: flex; justify-content: center; align-items: center;">
+          <div id="wa-share-card-qr" style="padding: 10px; background: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; display: inline-flex;"></div>
+        </div>
+      </div>
+
+      <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 0.88rem; line-height: 1.8;">
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #f1f5f9; padding-bottom: 4px;">
+          <span style="color: #64748b; font-weight: 600;">👤 اسم المشترك:</span>
+          <strong style="color: #0f172a;">${escapeHtml(customerName)}</strong>
+        </div>
+        ${customerPhone ? `
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #f1f5f9; padding: 4px 0;">
+          <span style="color: #64748b; font-weight: 600;">📞 رقم الهاتف:</span>
+          <span style="font-family: monospace; font-weight: 700; direction: ltr;">${escapeHtml(customerPhone)}</span>
+        </div>` : ""}
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #f1f5f9; padding: 4px 0;">
+          <span style="color: #64748b; font-weight: 600;">📅 مدة الاشتراك:</span>
+          <strong style="color: #0284c7;">${escapeHtml(subscriptionType)}</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #f1f5f9; padding: 4px 0;">
+          <span style="color: #64748b; font-weight: 600;">🗓️ تاريخ البدء:</span>
+          <span style="font-family: monospace; font-weight: 600;">${escapeHtml(startDate)}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #f1f5f9; padding: 4px 0;">
+          <span style="color: #64748b; font-weight: 600;">⌛ تاريخ الانتهاء:</span>
+          <span style="font-family: monospace; font-weight: 700; color: #dc2626;">${escapeHtml(endDate)}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding-top: 4px;">
+          <span style="color: #64748b; font-weight: 600;">💰 المبلغ الإجمالي:</span>
+          <strong style="color: #16a34a; font-size: 0.95rem;">${price} د.ع (${escapeHtml(paymentStatus)})</strong>
+        </div>
+      </div>
+
+      <div style="text-align: center; border-top: 1px solid #e2e8f0; padding-top: 10px; font-size: 0.74rem; color: #64748b; line-height: 1.4;">
+        <div>🌟 شكراً لاختياركم مركز الساري للبث الأرضي - نتمنى لكم مشاهدة ممتعة 🌟</div>
+        <div style="font-weight: 700; color: #0284c7; margin-top: 2px;">خدمة المشتركين والدعم الفني المباشر</div>
+      </div>
+    `;
+
+    document.body.appendChild(cardEl);
+
+    if (typeof QRCode !== "undefined" && deviceNumber) {
+      const qrBox = cardEl.querySelector("#wa-share-card-qr");
+      if (qrBox) {
+        new QRCode(qrBox, {
+          text: deviceNumber,
+          width: 130,
+          height: 130,
+          colorDark: "#000000",
+          colorLight: "#ffffff",
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      }
+    }
+
+    setTimeout(async () => {
+      try {
+        let imageBlob = null;
+        if (typeof html2canvas !== "undefined") {
+          const canvas = await html2canvas(cardEl, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+          imageBlob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+          
+          const downloadUrl = URL.createObjectURL(imageBlob);
+          const link = document.createElement("a");
+          link.href = downloadUrl;
+          link.download = `بطاقة-مشترك-${deviceNumber || customerName}.png`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => URL.revokeObjectURL(downloadUrl), 4000);
+        }
+
+        const waText = 
+`السلام عليكم ورحمة الله وبركاته 🌹
+🌟 *مركز الساري للبث الأرضي* 🌟
+📋 *بطاقة اشتراك وتفعيل جهاز*
+
+👤 *المشترك:* ${customerName}
+📱 *رقم الجهاز:* ${deviceNumber}
+${customerPhone ? `📞 *الهاتف:* ${customerPhone}\n` : ""}📅 *فترة الاشتراك:* ${subscriptionType}
+🗓️ *تاريخ البدء:* ${startDate}
+⌛ *تاريخ الانتهاء:* ${endDate}
+💰 *المبلغ:* ${price} د.ع
+💳 *حالة الدفع:* ${paymentStatus}
+
+🎉 تمت عملية التفعيل وتجديد الاشتراك بنجاح!
+(تم تنزيل وحفظ صورة البطاقة المعتمدة لإرسالها)
+شكراً لاختياركم مركز الساري للبث الأرضي.`;
+
+        let waUrl = "https://wa.me/?text=" + encodeURIComponent(waText);
+        if (customerPhone && typeof window.normalizeIraqiPhone === "function") {
+          const norm = window.normalizeIraqiPhone(customerPhone);
+          if (norm) {
+            waUrl = "https://wa.me/" + norm + "?text=" + encodeURIComponent(waText);
+          }
+        }
+
+        if (imageBlob && navigator.canShare && navigator.canShare({ files: [new File([imageBlob], "card.png", { type: "image/png" })] })) {
+          try {
+            const file = new File([imageBlob], `بطاقة-${deviceNumber}.png`, { type: "image/png" });
+            await navigator.share({
+              title: `بطاقة اشتراك - ${customerName}`,
+              text: waText,
+              files: [file]
+            });
+            showToast("تمت مشاركة بطاقة المشترك بنجاح!", "success");
+            return;
+          } catch (shareErr) {
+            console.log("Web share cancelled or fallback needed:", shareErr);
+          }
+        }
+
+        window.open(waUrl, "_blank");
+        showToast("تم تنزيل صورة البطاقة وفتح واتساب لمشاركتها مع المشترك!", "success");
+      } catch (err) {
+        console.error("Error sharing WhatsApp card:", err);
+        showToast("حدث خطأ أثناء إعداد البطاقة للمشاركة: " + (err.message || ""), "error");
+      } finally {
+        if (cardEl && cardEl.parentNode) {
+          cardEl.parentNode.removeChild(cardEl);
+        }
+      }
+    }, 450);
   };
 
   window.addMonthsToDate = function(dateStr, months) {

@@ -21,7 +21,7 @@ try {
 } catch (e) {}
 
 function markFirestoreQuotaExceeded() {
-  markFirestoreQuotaExceeded();
+  window.firestoreQuotaExceeded = true;
   try {
     const today = new Date().toISOString().substring(0, 10);
     localStorage.setItem('sari_firestore_quota_exceeded', 'true');
