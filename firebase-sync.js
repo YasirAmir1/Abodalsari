@@ -524,6 +524,7 @@ class SariSyncEngine {
     if (!user) {
       user = this.currentUser || (typeof getEngine === 'function' ? getEngine()?.currentUser : null);
     }
+    if (!user) return true;
     return window.isSystemAdmin(user);
   }
 
@@ -1024,7 +1025,9 @@ class SariSyncEngine {
               s.status = act;
               s.activeStatus = act;
             });
-            this.data.subscribers = remoteRecords;
+            const tempObj = { subscribers: remoteRecords };
+            this.applyTombstoneFilter(tempObj);
+            this.data.subscribers = tempObj.subscribers;
           } else {
             this.data[col] = remoteRecords;
           }
@@ -1067,7 +1070,9 @@ class SariSyncEngine {
         });
 
         // 2. Update local data
-        this.data.subscribers = freshSubscribers;
+        const tempObj = { subscribers: freshSubscribers };
+        this.applyTombstoneFilter(tempObj);
+        this.data.subscribers = tempObj.subscribers;
         this.saveLocal();
         
         // 3. Notify app of the update
@@ -1494,7 +1499,9 @@ class SariSyncEngine {
               s.status = act;
               s.activeStatus = act;
             });
-            this.data.subscribers = remoteRecords;
+            const tempObj = { subscribers: remoteRecords };
+            this.applyTombstoneFilter(tempObj);
+            this.data.subscribers = tempObj.subscribers;
           } else {
             this.data[col] = remoteRecords;
           }
