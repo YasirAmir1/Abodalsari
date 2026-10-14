@@ -22,6 +22,32 @@
     return (Number(num) || 0).toLocaleString('en-US');
   }
 
+  function parseNumber(val) {
+    if (val === null || val === undefined || val === '') return 0;
+    const clean = typeof val === 'string' ? val.replace(/[^\d.-]/g, '') : val;
+    return Number(clean) || 0;
+  }
+  window.parseNumber = window.parseNumber || parseNumber;
+
+  function formatInputWithCommas(input) {
+    if (!input) return;
+    const cursor = input.selectionStart || 0;
+    const oldLength = input.value.length;
+    const raw = input.value.replace(/[^\d]/g, '');
+    if (!raw) {
+      input.value = '';
+      return;
+    }
+    const formatted = Number(raw).toLocaleString('en-US');
+    input.value = formatted;
+    try {
+      const newLength = formatted.length;
+      const diff = newLength - oldLength;
+      input.setSelectionRange(cursor + diff, cursor + diff);
+    } catch (e) {}
+  }
+  window.formatInputWithCommas = window.formatInputWithCommas || formatInputWithCommas;
+
   function normalizeDigits(str) {
     if (!str) return '';
     const arabicDigits = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
@@ -270,7 +296,6 @@
             <div class="modal-body">
               <p>المدين: <strong>${escapeHtml(debt.customerName)}</strong></p>
               <p>المبلغ المتبقي حالياً: <strong style="color: var(--danger);">${formatIQD(debt.remainingAmount)}</strong></p>
-
               <div class="form-group" style="margin-top: 12px;">
                 <label>مبلغ الدفعة المسددة (د.ع) *</label>
                 <input type="text" inputmode="numeric" id="pay-amount" required value="${formatNumber(debt.remainingAmount)}" oninput="formatInputWithCommas(this)">
@@ -289,8 +314,10 @@
       e.preventDefault();
       const saveBtn = document.getElementById('btn-pay-submit');
       if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'جاري التسجيل...'; }
+
       try {
-        const amount = parseNumber(document.getElementById('pay-amount').value) || 0;
+        const rawVal = document.getElementById('pay-amount')?.value;
+        const amount = (typeof parseNumber === 'function' ? parseNumber(rawVal) : (typeof window.parseNumber === 'function' ? window.parseNumber(rawVal) : Number(String(rawVal).replace(/[^\d.-]/g, '')))) || 0;
         if (amount <= 0) {
           window.showToast('يرجى إدخال مبلغ صحيح للدفعة', 'warning');
           if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'تأكيد استلام الدفعة'; }
@@ -331,6 +358,7 @@
           (debt.saleCode && x.code === debt.saleCode) ||
           (debt.deviceNumber && x.deviceNumber === debt.deviceNumber)
         );
+
         if (s) {
           s.agentPaid = (Number(s.agentPaid) || 0) + amount;
           if (debt.remainingAmount <= 0) s.paymentStatus = 'تم التسديد';
@@ -347,7 +375,7 @@
           agentName = debt.seller || debt.customerName || 'وكيل';
         }
 
-        // 3. Add to agentSettlements log (سجل تسديدات الوكلاء في صفحة الوكلاء)
+        // 3. Add to agentSettlements log
         const settlementRecord = {
           id: 'settle-' + Date.now(),
           date: new Date().toISOString().replace('T', ' ').substring(0, 16),
@@ -365,12 +393,19 @@
 
         const allSettlements = [settlementRecord, ...(data.agentSettlements || [])];
 
-        await getEngine().commitData('debts', debts);
-        await getEngine().commitData('sales', sales);
-        await getEngine().commitData('agentSettlements', allSettlements);
+        // 4. Update data and close modal immediately (no delay / freezing)
+        data.debts = debts;
+        data.sales = sales;
+        data.agentSettlements = allSettlements;
 
-        window.showToast('تم تسجيل الدفعة وإضافتها إلى سجل تسديدات الوكيل والمبلغ المسدد بنجاح', 'success');
+        if (getEngine() && typeof getEngine().saveLocal === 'function') {
+          getEngine().saveLocal();
+        }
+
+        // Close modal immediately so it never gets stuck open
         window.closeModal();
+
+        window.showToast('تم تسجيل الدفعة وإضافتها إلى سجل تسديدات الوكيل بنجاح', 'success');
 
         // Refresh debts view if active
         const mainContent = document.getElementById('main-content');
@@ -380,10 +415,25 @@
             window.renderDebts(mainContent);
           }
         }
+
+        // Background sync to Firestore without blocking the UI
+        if (getEngine() && typeof getEngine().batchCommitData === 'function') {
+          getEngine().batchCommitData([
+            { collectionName: 'debts', items: debts },
+            { collectionName: 'sales', items: sales },
+            { collectionName: 'agentSettlements', items: allSettlements }
+          ]).catch(err => console.warn('Background sync warning on debt payment:', err));
+        } else if (getEngine() && typeof getEngine().commitData === 'function') {
+          Promise.all([
+            getEngine().commitData('debts', debts),
+            getEngine().commitData('sales', sales),
+            getEngine().commitData('agentSettlements', allSettlements)
+          ]).catch(err => console.warn('Background sync warning on debt payment:', err));
+        }
       } catch (err) {
         console.error('Error recording debt payment:', err);
-        window.showToast('حدث خطأ أثناء تسجيل الدفعة', 'error');
-        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'تأكيد استلام الدفعة'; }
+        window.closeModal();
+        window.showToast('حدث خطأ أثناء تسجيل الدفعة: ' + (err.message || ''), 'error');
       }
     };
   };
@@ -573,11 +623,24 @@
 
       const typeLabel = window.getSubscriberTypeLabel ? window.getSubscriberTypeLabel(s, sales) : (s.subscriptionType || '1 شهر');
       
+      // Determine if subscriber belongs to Main / Headquarters vs Agent
+      const ownerClean = String(s.owner || '').trim();
+      const isMainOwner = !ownerClean || 
+                          ownerClean === 'المركز الرئيسي' || 
+                          ownerClean === 'الرئيسية' || 
+                          ownerClean === 'الادارة' || 
+                          ownerClean === 'الإدارة' || 
+                          ownerClean === 'main' || 
+                          ownerClean === 'hq';
+
+      // زر التجديد يظهر فقط لمشتركي المركز الرئيسي وغير الفعالين، ويُخفى تماماً من أمام مشتركي الوكلاء
+      const showRenewalBtn = isMainOwner && s.status !== 'فعال';
+      
       return '<tr style="' + rowHighlightStyle + '">' +
         '<td>' +
           '<div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap;">' +
             '<strong class="cell-title">' + escapeHtml(s.name) + '</strong>' +
-            '<button class="btn btn-sm btn-success" onclick="openAdminSubscriberRenewalModal(\'' + s.id + '\')" title="تجديد الاشتراك وتعديل البيانات" style="padding: 1px 6px; font-size: 0.72rem; border-radius: 4px; background: var(--success, #10b981); color: #fff; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; ' + (s.status === 'فعال' ? 'display: none;' : '') + '">🔄 تجديد</button>' +
+            (showRenewalBtn ? ('<button class="btn btn-sm btn-success" onclick="openAdminSubscriberRenewalModal(\'' + s.id + '\')" title="تجديد اشتراك مشترك المركز الرئيسي وتعديل البيانات" style="padding: 1px 6px; font-size: 0.72rem; border-radius: 4px; background: var(--success, #10b981); color: #fff; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;">🔄 تجديد</button>') : '') +
           '</div>' +
           '<div class="cell-subtitle" style="direction: ltr; text-align: right;">' + escapeHtml(s.phone || '-') + '</div>' +
         '</td>' +
@@ -594,7 +657,7 @@
           (s.status === 'فعال' ? '<div class="cell-badges-group">' +
             '<span class="badge badge-success">فعال</span>' +
             (s.paymentStatus ? ('<span class="badge ' + (s.paymentStatus === 'مدفوع' ? 'badge-success' : ((s.paymentStatus === 'دين' || s.paymentStatus === 'غير مدفوع') ? 'badge-danger' : 'badge-neutral')) + '">' + escapeHtml(s.paymentStatus === 'غير مدفوع' ? 'دين' : s.paymentStatus) + '</span>') : '') +
-          '</div>' : '<span style="color: var(--muted); font-size: 0.8rem;">-</span>') +
+          '</div>' : '<div class="cell-badges-group"><span class="badge badge-neutral" style="background: rgba(100, 116, 139, 0.12); color: #64748b; border: 1px solid rgba(100, 116, 139, 0.25);">غير فعال</span></div>') +
         '</td>' +
         '<td style="text-align: center; white-space: nowrap;">' +
           (s.status === 'فعال' ? '<span style="font-weight: 800; font-size: 0.86rem; color: ' + amountColor + '; background: ' + amountBg + '; border: 1px solid ' + amountBorder + '; padding: 3px 9px; border-radius: 6px; display: inline-block; direction: ltr; font-family: monospace;">' + formatNumber(amount) + ' د.ع</span>' : '<span style="color: var(--muted); font-size: 0.8rem;">-</span>') +
@@ -603,10 +666,11 @@
           (s.status === 'فعال' ? '<div class="cell-date-range" style="direction: ltr; font-size: 0.8rem;"><div class="cell-date-from">بدء: ' + escapeHtml(s.activationDate || s.startDate || '-') + '</div><div class="cell-date-to">انتهاء: ' + escapeHtml(s.expiryDate || s.endDate || '-') + '</div></div>' : '<span style="color: var(--muted); font-size: 0.8rem;">-</span>') +
         '</td>' +
         '<td style="text-align: center;">' +
-          '<div class="action-btns" style="justify-content: center;">' +
+          '<div class="action-btns" style="justify-content: center; gap: 4px; display: inline-flex; align-items: center;">' +
             (waLink ? '<a href="' + waLink + '" target="_blank" class="icon-btn btn-whatsapp" title="مراسلة عبر واتساب">💬</a>' : '') +
-            '<button class="icon-btn" onclick="openSubscriberModal(\'' + s.id + '\')" title="تعديل">✏️</button>' +
-            '<button class="icon-btn btn-del" onclick="deleteSubscriber(\'' + s.id + '\')" title="حذف">🗑️</button>' +
+            '<button class="icon-btn" onclick="openSubscriberModal(\'' + s.id + '\')" title="تعديل بيانات المشترك">✏️</button>' +
+            '<button class="icon-btn btn-deactivate" onclick="confirmDeactivateSubscriber(\'' + s.id + '\')" title="إلغاء تفعيل الاشتراك وتفريغ البيانات (إطفاء)" aria-label="إلغاء تفعيل الاشتراك"><span style="font-size: 0.95rem; line-height: 1;" title="إلغاء التفعيل">🚫</span></button>' +
+            '<button class="icon-btn btn-del" onclick="deleteSubscriber(\'' + s.id + '\')" title="حذف المشترك نهائياً">🗑️</button>' +
           '</div>' +
         '</td>' +
       '</tr>';
@@ -691,10 +755,18 @@
       return { ...s, daysLeft: diffDays };
     }).sort((a, b) => a.daysLeft - b.daysLeft);
 
+    const allSubsOriginal = data.subscribers || [];
+    const countAll = allSubsOriginal.length;
+    const countActive = allSubsOriginal.filter(s => s.status === 'فعال').length;
+    const countInactive = allSubsOriginal.filter(s => s.status === 'غير فعال').length;
+    const countExpiring = expiringSoonSubs.length;
+
     if (subFilter.owner !== 'all') {
       subs = subs.filter(s => s.owner === subFilter.owner);
     }
-    if (subFilter.status !== 'all') {
+    if (subFilter.status === 'منتهي قريباً' || subFilter.expiring === '7days') {
+      subs = subs.filter(s => expiringSoonSubs.some(exp => exp.id === s.id));
+    } else if (subFilter.status !== 'all') {
       subs = subs.filter(s => s.status === subFilter.status);
     }
     if (subFilter.paymentStatus && subFilter.paymentStatus !== 'all') {
@@ -766,8 +838,12 @@
             <h1>المشتركون وأجهزة البث</h1>
             <p class="subtitle">متابعة تواريخ تفعيل وانتهاء اشتراكات الأجهزة واستيرادها من Excel ونظام التنبيه التلقائي</p>
           </div>
-          <div class="header-actions">
-            <button class="btn btn-primary" onclick="openSubscriberModal()">
+          <div class="header-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn btn-primary" onclick="openSaleModal()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span>تسجيل بيع جديد</span>
+            </button>
+            <button class="btn btn-secondary" onclick="openSubscriberModal()">
               <span>➕</span> <span>إضافة مشترك جديد</span>
             </button>
           </div>
@@ -891,11 +967,11 @@
               <div class="filter-group-block">
                 <span class="filter-group-label">حالة الاشتراك:</span>
                 <div class="filter-chips-wrap">
-                  <span class="chip ${subFilter.status === 'all' ? 'active' : ''}" onclick="setSubFilter('status', 'all')">الكل</span>
-                  <span class="chip ${subFilter.status === 'فعال' ? 'active' : ''}" onclick="setSubFilter('status', 'فعال')">فعال</span>
-                  <span class="chip ${subFilter.status === 'غير فعال' ? 'active' : ''}" onclick="setSubFilter('status', 'غير فعال')">غير فعال</span>
-                  <span class="chip ${subFilter.expiring === '7days' ? 'active' : ''}" style="${subFilter.expiring === '7days' ? 'background: #b45309; color: white;' : 'color: #b45309; border-color: rgba(234, 154, 42, 0.4);'}" onclick="setSubFilter('expiring', '${subFilter.expiring === '7days' ? 'all' : '7days'}')">
-                    🔔 تنبيه (7 أيام) [${expiringSoonSubs.length}]
+                  <span class="chip ${subFilter.status === 'all' && subFilter.expiring !== '7days' ? 'active' : ''}" onclick="setSubFilter('status', 'all'); setSubFilter('expiring', 'all')">الكل (${countAll})</span>
+                  <span class="chip ${subFilter.status === 'فعال' ? 'active' : ''}" onclick="setSubFilter('status', 'فعال'); setSubFilter('expiring', 'all')">🟢 فعال (${countActive})</span>
+                  <span class="chip ${subFilter.status === 'غير فعال' ? 'active' : ''}" onclick="setSubFilter('status', 'غير فعال'); setSubFilter('expiring', 'all')">🔴 غير فعال (${countInactive})</span>
+                  <span class="chip ${subFilter.status === 'منتهي قريباً' || subFilter.expiring === '7days' ? 'active' : ''}" style="${subFilter.status === 'منتهي قريباً' || subFilter.expiring === '7days' ? 'background: #b45309; color: white;' : 'color: #b45309; border-color: rgba(234, 154, 42, 0.4);'}" onclick="setSubFilter('status', 'منتهي قريباً'); setSubFilter('expiring', '7days')">
+                    ⏳ منتهي قريباً [${countExpiring}]
                   </span>
                 </div>
               </div>
@@ -940,8 +1016,47 @@
           </div>
         </div>
 
-          <div class="table-responsive">
-            <table class="data-table subscribers-table">
+          
+        <!-- Status Classification Toolbar & Quick Actions above Subscribers Table (تصنيف المشتركين وزر تسجيل بيع جديد) -->
+        <div class="subscribers-status-filter-toolbar">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span style="font-size: 0.9rem; font-weight: 800; color: var(--text); display: flex; align-items: center; gap: 6px;">
+              <span>⚡</span>
+              <span>تصنيف حسب حالة الاشتراك:</span>
+            </span>
+            <div style="display: inline-flex; gap: 6px; flex-wrap: wrap;">
+              <button type="button" class="sub-status-btn ${subFilter.status === 'all' && subFilter.expiring !== '7days' ? 'active-all' : ''}" onclick="setSubFilter('status', 'all'); setSubFilter('expiring', 'all');">
+                <span>الكل</span>
+                <span class="badge" style="background: rgba(0,0,0,0.12); padding: 2px 7px; border-radius: 12px; font-size: 0.78rem;">${countAll}</span>
+              </button>
+              <button type="button" class="sub-status-btn ${subFilter.status === 'فعال' ? 'active-active' : ''}" onclick="setSubFilter('status', 'فعال'); setSubFilter('expiring', 'all');">
+                <span>🟢 فعال</span>
+                <span class="badge" style="background: rgba(0,0,0,0.12); padding: 2px 7px; border-radius: 12px; font-size: 0.78rem;">${countActive}</span>
+              </button>
+              <button type="button" class="sub-status-btn ${subFilter.status === 'غير فعال' ? 'active-inactive' : ''}" onclick="setSubFilter('status', 'غير فعال'); setSubFilter('expiring', 'all');">
+                <span>🔴 غير فعال</span>
+                <span class="badge" style="background: rgba(0,0,0,0.12); padding: 2px 7px; border-radius: 12px; font-size: 0.78rem;">${countInactive}</span>
+              </button>
+              <button type="button" class="sub-status-btn ${subFilter.status === 'منتهي قريباً' || subFilter.expiring === '7days' ? 'active-expiring' : ''}" onclick="setSubFilter('status', 'منتهي قريباً'); setSubFilter('expiring', '7days');">
+                <span>⏳ منتهي قريباً</span>
+                <span class="badge" style="background: rgba(0,0,0,0.12); padding: 2px 7px; border-radius: 12px; font-size: 0.78rem;">${countExpiring}</span>
+              </button>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <!-- نسخة طبق الأصل لزر تسجيل بيع جديد بنفس الخصائص والمواصفات والعمل -->
+            <button type="button" class="btn btn-primary" onclick="window.openSaleModal()" title="تسجيل بيع جديد وتفعيل اشتراك" style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.84rem; padding: 6px 14px; font-weight: 700;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="16" height="16" style="vertical-align: middle;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span>تسجيل بيع جديد</span>
+            </button>
+            <div style="font-size: 0.85rem; color: var(--muted); font-weight: 600;">
+              عرض <strong style="color: var(--text);">${subs.length}</strong> من إجمالي <strong style="color: var(--text);">${countAll}</strong> مشترك
+            </div>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table subscribers-table">
               <thead>
                 <tr>
                   <th>المشترك / الهاتف</th>
@@ -998,7 +1113,18 @@
   };
 
   window.setSubFilter = function(k, v) {
-    subFilter[k] = v;
+    if (typeof k === 'object' && k !== null) {
+      Object.assign(subFilter, k);
+    } else {
+      subFilter[k] = v;
+      if (k === 'status') {
+        if (v !== 'منتهي قريباً') {
+          subFilter.expiring = 'all';
+        } else {
+          subFilter.expiring = '7days';
+        }
+      }
+    }
     const mainEl = document.getElementById('main-content');
     if (mainEl) {
       window.renderSubscribers(mainEl);
@@ -1012,6 +1138,128 @@
       }
     }
   };
+
+  window.confirmDeactivateSubscriber = function(subId) {
+    const data = getData();
+    const subscriber = (data.subscribers || []).find(s => s.id === subId);
+    if (!subscriber) {
+      window.showToast('المشترك غير موجود', 'error');
+      return;
+    }
+    const subName = subscriber.name || 'المشترك';
+    const devNum = subscriber.deviceNumber ? ` (رقم الجهاز: ${subscriber.deviceNumber})` : '';
+
+    const title = 'تأكيد إلغاء تفعيل اشتراك المشترك';
+    const message = `هل أنت متأكد من رغبتك في إلغاء تفعيل اشتراك المشترك "${subName}"${devNum}؟
+
+⚠️ سيتم تفريغ تواريخ بدء وانتهاء الاشتراك، وتفريغ بيانات الدفع والمبالغ المالية، وإرجاع حالة الاشتراك إلى "غير فعال".`;
+
+    if (typeof window.showConfirmModal === 'function') {
+      window.showConfirmModal(
+        title,
+        message,
+        async () => {
+          await window.executeDeactivateSubscriber(subId);
+        },
+        'تأكيد إلغاء التفعيل',
+        'تراجع',
+        true
+      );
+    } else {
+      const modalContainer = document.getElementById('modal-container');
+      if (!modalContainer) return;
+      modalContainer.innerHTML = `
+        <div class="modal-overlay active" style="z-index: 9999;" onclick="if (event.target === this) window.closeModal()">
+          <div class="modal-dialog" style="max-width: 480px; text-align: right; direction: rtl;" onclick="event.stopPropagation()">
+            <div class="modal-header" style="border-bottom: 1px solid var(--line); padding-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 1.5rem; color: #dc2626;">⚠️</span>
+                <h3 style="margin: 0; font-size: 1.15rem; color: var(--text);">${escapeHtml(title)}</h3>
+              </div>
+              <button type="button" class="modal-close" onclick="window.closeModal()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--muted);">✕</button>
+            </div>
+            <div class="modal-body" style="padding: 18px 0; color: var(--text); font-size: 0.95rem; line-height: 1.6; white-space: pre-line;">
+              ${escapeHtml(message)}
+            </div>
+            <div class="modal-footer" style="border-top: 1px solid var(--line); padding-top: 14px; display: flex; gap: 10px; justify-content: flex-end;">
+              <button type="button" class="btn btn-secondary" onclick="window.closeModal()" style="min-width: 90px;">تراجع</button>
+              <button type="button" id="custom-confirm-btn" class="btn btn-danger" style="min-width: 140px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; background: #dc2626; color: white;">
+                <span>🚫</span>
+                <span>تأكيد إلغاء التفعيل</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.getElementById('custom-confirm-btn').onclick = async () => {
+        window.closeModal();
+        await window.executeDeactivateSubscriber(subId);
+      };
+    }
+  };
+
+  window.executeDeactivateSubscriber = async function(id) {
+    try {
+      const data = getData();
+      const subs = data.subscribers || [];
+      const subscriber = subs.find(s => s.id === id);
+      if (!subscriber) {
+        window.showToast('المشترك غير موجود', 'error');
+        return;
+      }
+
+      // 1. Reset active status to inactive
+      subscriber.status = 'غير فعال';
+      subscriber.activeStatus = 'غير فعال';
+      subscriber.isActivated = false;
+      subscriber.deactivated = true;
+      subscriber.lastDeactivatedAt = new Date().toISOString();
+
+      // 2. Clear subscription dates
+      subscriber.activationDate = '';
+      subscriber.startDate = '';
+      subscriber.expiryDate = '';
+      subscriber.endDate = '';
+      subscriber.dueDate = '';
+      subscriber.subscriptionType = '';
+
+      // 3. Clear payment data
+      subscriber.paymentStatus = '';
+      subscriber.paymentMethod = '';
+      subscriber.price = 0;
+      subscriber.paidAmount = 0;
+      subscriber.remainingAmount = 0;
+
+      data.subscribers = subs;
+      if (getEngine() && typeof getEngine().saveLocal === 'function') {
+        getEngine().saveLocal();
+      }
+
+      window.showToast(`تم إلغاء تفعيل اشتراك (${subscriber.name}) وتفريغ التواريخ والبيانات بنجاح (الحالة: غير فعال)`, 'success');
+
+      if (typeof window.renderSubscribers === 'function') {
+        window.renderSubscribers(document.getElementById('main-content'));
+      }
+
+      if (getEngine() && typeof getEngine().commitData === 'function') {
+        getEngine().commitData('subscribers', subs).catch(err => console.warn('Sync warning on deactivating subscriber:', err));
+      }
+    } catch (err) {
+      console.error('Error deactivating subscriber:', err);
+      window.showToast('حدث خطأ أثناء إلغاء تفعيل الاشتراك: ' + (err.message || ''), 'error');
+    }
+  };
+
+  // Safe wrapper: always triggers confirmation modal if called without explicit force flag
+  window.deactivateSubscriber = function(subId, force = false) {
+    if (!force) {
+      window.confirmDeactivateSubscriber(subId);
+      return;
+    }
+    return window.executeDeactivateSubscriber(subId);
+  };
+  window.deactivateSubscriberWithConfirm = window.confirmDeactivateSubscriber;
+  window.cancelSubscriberSubscription = window.confirmDeactivateSubscriber;
 
   window.deleteSubscriber = function(id) {
     window.showConfirmModal('حذف المشترك', 'هل تريد حذف هذا المشترك نهائياً من النظام مع كافة سجلات المبيعات والديون المتعلقة به؟', async () => {

@@ -6,6 +6,29 @@
 
 const STORAGE_KEY = 'sari-app-v1';
 
+// Persistent daily quota tracking
+try {
+  const today = new Date().toISOString().substring(0, 10);
+  const quotaDate = localStorage.getItem('sari_firestore_quota_date');
+  if (localStorage.getItem('sari_firestore_quota_exceeded') === 'true' && quotaDate === today) {
+    markFirestoreQuotaExceeded();
+    console.warn('Firestore daily write quota reached for today. Running in local persistence mode.');
+  } else if (quotaDate && quotaDate !== today) {
+    localStorage.removeItem('sari_firestore_quota_exceeded');
+    localStorage.removeItem('sari_firestore_quota_date');
+    window.firestoreQuotaExceeded = false;
+  }
+} catch (e) {}
+
+function markFirestoreQuotaExceeded() {
+  markFirestoreQuotaExceeded();
+  try {
+    const today = new Date().toISOString().substring(0, 10);
+    localStorage.setItem('sari_firestore_quota_exceeded', 'true');
+    localStorage.setItem('sari_firestore_quota_date', today);
+  } catch (e) {}
+}
+
 window.formatDeviceNumber = function(val) {
   if (val === null || val === undefined || String(val).trim() === '' || String(val).trim() === '-') {
     return '00';
@@ -41,9 +64,13 @@ window.getSubscriberActiveStatus = function(s, today) {
   if (!today) today = new Date().toISOString().substring(0, 10);
   if (!s) return 'غير فعال';
 
-  // 1. Direct status from Headquarters record takes highest precedence!
-  // If the subscriber is active in Headquarters/database, they MUST be active at the Agents as well
+  // 1. Inactive status explicitly set takes absolute precedence!
   const rawStatus = String(s.status || s.activeStatus || '').trim();
+  if (rawStatus === 'غير فعال' || s.isActivated === false || s.deactivated === true) {
+    return 'غير فعال';
+  }
+
+  // 2. Direct active status from Headquarters record
   if (rawStatus === 'فعال' || s.isActivated === true || s.is_active === true) {
     return 'فعال';
   }
@@ -1011,7 +1038,7 @@ class SariSyncEngine {
       }
     } catch (e) {
       if (e?.code === 'resource-exhausted' || e?.message?.includes('quota') || e?.message?.includes('Quota')) {
-        window.firestoreQuotaExceeded = true;
+        markFirestoreQuotaExceeded();
         console.warn('Firestore quota limit reached during fetch. Running in local mode.');
       } else {
         console.warn('Error fetching all central collections:', e.message);
@@ -1514,7 +1541,7 @@ class SariSyncEngine {
           window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: col } }));
         }, err => {
           if (err?.code === 'resource-exhausted' || err?.message?.includes('quota') || err?.message?.includes('Quota')) {
-            window.firestoreQuotaExceeded = true;
+            markFirestoreQuotaExceeded();
           } else {
             console.warn(`Firestore listener on ${col}:`, err.message);
           }
@@ -1522,7 +1549,7 @@ class SariSyncEngine {
         this.unsubscribers.push(unsub);
       } catch (e) {
         if (e?.code === 'resource-exhausted' || e?.message?.includes('quota') || e?.message?.includes('Quota')) {
-          window.firestoreQuotaExceeded = true;
+          markFirestoreQuotaExceeded();
         } else {
           console.warn(`Could not attach listener for ${col}`, e);
         }
@@ -1545,7 +1572,7 @@ class SariSyncEngine {
         window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'agentSubmissions' } }));
       }, err => {
         if (err?.code === 'resource-exhausted' || err?.message?.includes('quota') || err?.message?.includes('Quota')) {
-          window.firestoreQuotaExceeded = true;
+          markFirestoreQuotaExceeded();
         } else {
           console.warn('Submissions listener err:', err);
         }
@@ -1610,7 +1637,7 @@ class SariSyncEngine {
       }
     } catch (e) {
       if (e?.code === 'resource-exhausted' || e?.message?.includes('quota') || e?.message?.includes('Quota')) {
-        window.firestoreQuotaExceeded = true;
+        markFirestoreQuotaExceeded();
         console.warn('Firestore quota limit reached. Running in local persistence mode.');
       } else {
         console.warn('Error pushing to Firestore:', e?.message || e);
@@ -1657,7 +1684,7 @@ class SariSyncEngine {
         await this.pushToFirestore(collectionName, updatedItems);
       } catch (err) {
         if (err?.code === 'resource-exhausted' || err?.message?.includes('quota') || err?.message?.includes('Quota')) {
-          window.firestoreQuotaExceeded = true;
+          markFirestoreQuotaExceeded();
           console.warn('Firestore quota limit reached. Running in local persistence mode.');
         } else {
           console.warn('Commit data Firestore sync warning:', err);
@@ -1699,7 +1726,7 @@ class SariSyncEngine {
         await batch.commit();
       } catch (e) {
         if (e?.code === 'resource-exhausted' || e?.message?.includes('quota') || e?.message?.includes('Quota')) {
-          window.firestoreQuotaExceeded = true;
+          markFirestoreQuotaExceeded();
           console.warn('Firestore quota limit reached during batch commit. Running in local persistence mode.');
         } else {
           console.warn('Batch commit Firestore error:', e?.message || e);

@@ -1369,12 +1369,27 @@
 
       const allSettlements = [settlementRecord, ...(data.agentSettlements || [])];
 
-      await getEngine().commitData('debts', updatedDebts);
-      await getEngine().commitData('sales', allSales);
-      await getEngine().commitData('agentSettlements', allSettlements);
-
-      window.showToast(`تم تسجيل تسديد ديون ${agentName} بنجاح`, 'success');
+      data.debts = updatedDebts;
+      data.sales = allSales;
+      data.agentSettlements = allSettlements;
+      if (getEngine() && typeof getEngine().saveLocal === 'function') {
+        getEngine().saveLocal();
+      }
       window.closeModal();
+      window.showToast(`تم تسجيل تسديد ديون ${agentName} بنجاح`, 'success');
+      if (getEngine() && typeof getEngine().batchCommitData === 'function') {
+        getEngine().batchCommitData([
+          { collectionName: 'debts', items: updatedDebts },
+          { collectionName: 'sales', items: allSales },
+          { collectionName: 'agentSettlements', items: allSettlements }
+        ]).catch(err => console.warn('Settlement sync warning:', err));
+      } else if (getEngine() && typeof getEngine().commitData === 'function') {
+        Promise.all([
+          getEngine().commitData('debts', updatedDebts),
+          getEngine().commitData('sales', allSales),
+          getEngine().commitData('agentSettlements', allSettlements)
+        ]).catch(err => console.warn('Settlement sync warning:', err));
+      }
     };
   };
 

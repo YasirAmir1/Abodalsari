@@ -3464,3 +3464,75 @@ input[type="date"] {
 
 
 
+
+
+/* --- Deactivate Button & Subscribers Status Toolbar --- */
+.btn-deactivate {
+  color: #dc2626 !important;
+  background: rgba(239, 68, 68, 0.1) !important;
+  border: 1px solid rgba(239, 68, 68, 0.28) !important;
+  border-radius: 6px;
+  padding: 4px 7px;
+  font-size: 0.88rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+.btn-deactivate:hover {
+  background: rgba(239, 68, 68, 0.25) !important;
+  border-color: #ef4444 !important;
+  transform: translateY(-1px);
+}
+.subscribers-status-filter-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.sub-status-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  border: 1px solid var(--line);
+  background: var(--surface-alt);
+  color: var(--text-sub);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.sub-status-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.sub-status-btn.active-all {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.sub-status-btn.active-active {
+  background: #10b981;
+  color: #fff;
+  border-color: #10b981;
+}
+.sub-status-btn.active-inactive {
+  background: #ef4444;
+  color: #fff;
+  border-color: #ef4444;
+}
+.sub-status-btn.active-expiring {
+  background: #b45309;
+  color: #fff;
+  border-color: #b45309;
+}
