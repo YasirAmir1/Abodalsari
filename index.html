@@ -252,6 +252,23 @@
         </div>
       </header>
 
+      <!-- Header Import & Sync Progress Bar (شريط تقدم مخصص بأسفل الهيدر يظهر فقط أثناء استيراد البيانات) -->
+      <div id="header-import-progress-container" class="header-import-progress-container" style="display: none;" role="progressbar" aria-label="شريط تقدم استيراد ومزامنة البيانات" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="header-import-progress-track">
+          <div id="header-import-progress-fill" class="header-import-progress-fill" style="width: 0%;"></div>
+        </div>
+        <div class="header-import-progress-content">
+          <div class="header-import-progress-info">
+            <span id="header-import-progress-icon" class="header-import-progress-icon"></span>
+            <span id="header-import-progress-text" class="header-import-progress-text">جاري استيراد البيانات...</span>
+          </div>
+          <div class="header-import-progress-meta">
+            <span id="header-import-progress-percent" class="header-import-progress-percent">0%</span>
+            <button type="button" id="header-import-progress-close" class="header-import-progress-close-btn" title="إغلاق الشريط" aria-label="إغلاق">✕</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Dynamic Page Container -->
       <main id="main-content">
         <!-- Rendered dynamically by app.js -->
@@ -358,15 +375,16 @@
   <div id="toast-container"></div>
 
   <!-- Scripts -->
-  <script src="/firebase-config.js?v=37"></script>
-  <script src="/firebase-sync.js?v=37"></script>
-  <script src="/app-modules.js?v=37"></script>
-  <script src="/app-features.js?v=37"></script>
-  <script src="/app-barcodes.js?v=37"></script>
-  <script src="/chime-b64.js?v=37"></script>
-  <script src="/app-admin-tools.js?v=37"></script>
-  <script src="/app-notifications.js?v=37"></script>
-  <script src="/app.js?v=37"></script>
+  <script src="/firebase-config.js?v=39"></script>
+  <script src="/firebase-sync.js?v=39"></script>
+  <script src="/app-import-progress.js?v=39"></script>
+  <script src="/app-modules.js?v=39"></script>
+  <script src="/app-features.js?v=39"></script>
+  <script src="/app-barcodes.js?v=39"></script>
+  <script src="/chime-b64.js?v=39"></script>
+  <script src="/app-admin-tools.js?v=39"></script>
+  <script src="/app-notifications.js?v=39"></script>
+  <script src="/app.js?v=39"></script>
 
   <!-- PWA Service Worker Registration -->
   <script>

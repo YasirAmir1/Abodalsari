@@ -26,8 +26,12 @@ function markFirestoreQuotaExceeded() {
     const today = new Date().toISOString().substring(0, 10);
     localStorage.setItem('sari_firestore_quota_exceeded', 'true');
     localStorage.setItem('sari_firestore_quota_date', today);
+    if (window.syncEngine && typeof window.syncEngine.stopRealtimeSync === 'function') {
+      window.syncEngine.stopRealtimeSync();
+    }
   } catch (e) {}
 }
+
 
 window.formatDeviceNumber = function(val) {
   if (val === null || val === undefined || String(val).trim() === '' || String(val).trim() === '-') {
@@ -546,6 +550,14 @@ class SariSyncEngine {
   }
 
   async clearAllData() {
+    (this.data.subscribers || []).forEach(s => {
+      this.addDeletedSubscriberTombstone(s.id, s.deviceNumber, s.name, s.phone);
+    });
+    try {
+      localStorage.setItem('sari_all_subscribers_cleared', 'true');
+      localStorage.setItem('sari_subscribers_cleared_timestamp', String(Date.now()));
+    } catch (e) {}
+
     this.data = {
       subscribers: [],
       sales: [],
@@ -562,7 +574,7 @@ class SariSyncEngine {
     window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'all' } }));
     
     // Only attempt to sync if not in local-only mode
-    if (!window.firestoreQuotaExceeded && this.db && window.isFirebaseConfigured()) {
+    if (this.db && window.isFirebaseConfigured && window.isFirebaseConfigured()) {
        try {
          // Push empty arrays for essential collections to "clear" Firestore
          await Promise.all([
@@ -644,50 +656,130 @@ class SariSyncEngine {
     }
   }
 
-  // --- Deleted Subscriber Tombstone Management (Ensures Deleted Subscribers Never Resurrect) ---
+  // --- Deleted Subscriber & User Tombstone Management (Ensures Deleted Records Never Resurrect) ---
+  normalizeSubscriberName(str) {
+    if (!str) return '';
+    return String(str)
+      .trim()
+      .toLowerCase()
+      .replace(/[أإآ]/g, 'ا')
+      .replace(/ة/g, 'ه')
+      .replace(/ى/g, 'ي')
+      .replace(/[\u064B-\u065F]/g, '')
+      .replace(/\s+/g, ' ');
+  }
+
+  isRealDeviceNumber(val) {
+    if (!val) return false;
+    const str = String(val).trim();
+    if (!str || str === '00' || str === '-' || str === '0' || str === 'null' || str === 'undefined') return false;
+    return str.length >= 2;
+  }
+
   getDeletedSubscriberTombstones() {
     try {
       const ids = JSON.parse(localStorage.getItem('sari_deleted_subscriber_ids') || '[]');
       const devices = JSON.parse(localStorage.getItem('sari_deleted_device_numbers') || '[]');
+      const names = JSON.parse(localStorage.getItem('sari_deleted_subscriber_names') || '[]');
+      const phones = JSON.parse(localStorage.getItem('sari_deleted_subscriber_phones') || '[]');
       return {
-        ids: new Set(Array.isArray(ids) ? ids.map(x => String(x).trim()) : []),
-        devices: new Set(Array.isArray(devices) ? devices.map(x => String(x).trim()) : [])
+        ids: new Set(Array.isArray(ids) ? ids.map(x => String(x).trim()).filter(Boolean) : []),
+        devices: new Set(Array.isArray(devices) ? devices.map(x => String(x).trim()).filter(Boolean) : []),
+        names: new Set(Array.isArray(names) ? names.map(x => this.normalizeSubscriberName(x)).filter(Boolean) : []),
+        phones: new Set(Array.isArray(phones) ? phones.map(x => String(x).trim().replace(/\D/g, '')).filter(Boolean) : [])
       };
     } catch (e) {
-      return { ids: new Set(), devices: new Set() };
+      return { ids: new Set(), devices: new Set(), names: new Set(), phones: new Set() };
     }
   }
 
-  addDeletedSubscriberTombstone(id, deviceNumber) {
+  addDeletedSubscriberTombstone(id, deviceNumber, name, phone) {
     try {
-      const { ids, devices } = this.getDeletedSubscriberTombstones();
-      if (id) ids.add(String(id).trim());
-      if (deviceNumber) devices.add(String(deviceNumber).trim());
+      const { ids, devices, names, phones } = this.getDeletedSubscriberTombstones();
+      if (id) {
+        ids.add(String(id).trim());
+      }
+      if (this.isRealDeviceNumber(deviceNumber)) {
+        const cleanDev = String(deviceNumber).trim();
+        devices.add(cleanDev);
+        const without00 = cleanDev.replace(/^00+/, '');
+        if (without00) devices.add(without00);
+      }
+      if (name) {
+        const norm = this.normalizeSubscriberName(name);
+        if (norm) names.add(norm);
+      }
+      if (phone) {
+        const digits = String(phone).trim().replace(/\D/g, '');
+        if (digits.length >= 7) phones.add(digits);
+      }
+
       localStorage.setItem('sari_deleted_subscriber_ids', JSON.stringify(Array.from(ids)));
       localStorage.setItem('sari_deleted_device_numbers', JSON.stringify(Array.from(devices)));
+      localStorage.setItem('sari_deleted_subscriber_names', JSON.stringify(Array.from(names)));
+      localStorage.setItem('sari_deleted_subscriber_phones', JSON.stringify(Array.from(phones)));
+    } catch (e) {
+      console.warn('Error recording subscriber tombstone:', e);
+    }
+  }
+
+  unmarkTombstone(id, deviceNumber, name) {
+    try {
+      const { ids, devices, names, phones } = this.getDeletedSubscriberTombstones();
+      if (id) ids.delete(String(id).trim());
+      if (deviceNumber) {
+        devices.delete(String(deviceNumber).trim());
+        devices.delete(String(deviceNumber).trim().replace(/^00+/, ''));
+      }
+      if (name) {
+        names.delete(this.normalizeSubscriberName(name));
+      }
+      localStorage.setItem('sari_deleted_subscriber_ids', JSON.stringify(Array.from(ids)));
+      localStorage.setItem('sari_deleted_device_numbers', JSON.stringify(Array.from(devices)));
+      localStorage.setItem('sari_deleted_subscriber_names', JSON.stringify(Array.from(names)));
     } catch (e) {}
   }
 
-  unmarkTombstone(id, deviceNumber) {
+  getDeletedUserTombstones() {
     try {
-      const { ids, devices } = this.getDeletedSubscriberTombstones();
-      if (id) ids.delete(String(id).trim());
-      if (deviceNumber) devices.delete(String(deviceNumber).trim());
-      localStorage.setItem('sari_deleted_subscriber_ids', JSON.stringify(Array.from(ids)));
-      localStorage.setItem('sari_deleted_device_numbers', JSON.stringify(Array.from(devices)));
+      const uids = JSON.parse(localStorage.getItem('sari_deleted_user_uids') || '[]');
+      const usernames = JSON.parse(localStorage.getItem('sari_deleted_user_usernames') || '[]');
+      return {
+        userIds: new Set(Array.isArray(uids) ? uids.map(x => String(x).trim()) : []),
+        usernames: new Set(Array.isArray(usernames) ? usernames.map(x => String(x).trim().toLowerCase()) : [])
+      };
+    } catch (e) {
+      return { userIds: new Set(), usernames: new Set() };
+    }
+  }
+
+  addDeletedUserTombstone(uid, username) {
+    try {
+      const { userIds, usernames } = this.getDeletedUserTombstones();
+      if (uid) userIds.add(String(uid).trim());
+      if (username) usernames.add(String(username).trim().toLowerCase());
+      localStorage.setItem('sari_deleted_user_uids', JSON.stringify(Array.from(userIds)));
+      localStorage.setItem('sari_deleted_user_usernames', JSON.stringify(Array.from(usernames)));
     } catch (e) {}
   }
 
   applyTombstoneFilter(dataObj) {
     if (!dataObj) return dataObj;
-    const { ids, devices } = this.getDeletedSubscriberTombstones();
+    const { ids, devices, names, phones } = this.getDeletedSubscriberTombstones();
+    const { userIds, usernames } = this.getDeletedUserTombstones();
 
     if (Array.isArray(dataObj.agents)) {
       dataObj.agents = dataObj.agents.filter(a => !isPurgedAgent(a));
     }
 
     if (Array.isArray(dataObj.users)) {
-      dataObj.users = dataObj.users.filter(u => !isPurgedAgent(u));
+      dataObj.users = dataObj.users.filter(u => {
+        if (isPurgedAgent(u)) return false;
+        const uid = String(u.uid || u.id || '').trim();
+        const uname = String(u.username || '').trim().toLowerCase();
+        if (userIds.has(uid) || usernames.has(uname)) return false;
+        return true;
+      });
     }
 
     if (dataObj.pricing && dataObj.pricing.agentPrices) {
@@ -698,45 +790,73 @@ class SariSyncEngine {
       });
     }
 
+    // Check if entire subscriber collection was cleared previously
+    const allCleared = localStorage.getItem('sari_all_subscribers_cleared') === 'true';
+    const clearedTimestamp = Number(localStorage.getItem('sari_subscribers_cleared_timestamp') || '0');
+
     if (Array.isArray(dataObj.subscribers)) {
-      if (ids.size > 0 || devices.size > 0) {
+      if (allCleared && dataObj.subscribers.length > 0) {
         dataObj.subscribers = dataObj.subscribers.filter(s => {
-          if (s.id && ids.has(String(s.id).trim())) return false;
-          if (s.deviceNumber && devices.has(String(s.deviceNumber).trim())) return false;
+          const created = Number(s.createdAtTimestamp || 0);
+          return created > clearedTimestamp;
+        });
+      }
+
+      if (ids.size > 0 || devices.size > 0 || names.size > 0 || phones.size > 0) {
+        dataObj.subscribers = dataObj.subscribers.filter(s => {
+          const sId = String(s.id || '').trim();
+          const sDocId = String(s.docId || '').trim();
+          const sDev = String(s.deviceNumber || '').trim();
+          const sDevClean = sDev.replace(/^00+/, '');
+          const sName = this.normalizeSubscriberName(s.name);
+          const sPhone = String(s.phone || '').trim().replace(/\D/g, '');
+
+          if (sId && ids.has(sId)) return false;
+          if (sDocId && ids.has(sDocId)) return false;
+          if (this.isRealDeviceNumber(sDev) && (devices.has(sDev) || (sDevClean && devices.has(sDevClean)))) return false;
+          if (sName && names.has(sName)) return false;
+          if (sPhone && sPhone.length >= 7 && phones.has(sPhone)) return false;
           return true;
         });
       }
-      dataObj.subscribers.forEach(s => {
-      });
     }
 
     if (Array.isArray(dataObj.sales)) {
-      if (ids.size > 0 || devices.size > 0) {
+      if (ids.size > 0 || devices.size > 0 || names.size > 0) {
         dataObj.sales = dataObj.sales.filter(s => {
-          if (s.deviceNumber && devices.has(String(s.deviceNumber).trim())) return false;
-          if (s.subscriberId && ids.has(String(s.subscriberId).trim())) return false;
+          const sDev = String(s.deviceNumber || '').trim();
+          const sDevClean = sDev.replace(/^00+/, '');
+          const sSubId = String(s.subscriberId || '').trim();
+          const sCust = this.normalizeSubscriberName(s.customerName);
+
+          if (sSubId && ids.has(sSubId)) return false;
+          if (this.isRealDeviceNumber(sDev) && (devices.has(sDev) || (sDevClean && devices.has(sDevClean)))) return false;
+          if (sCust && names.has(sCust)) return false;
           return true;
         });
       }
-      dataObj.sales.forEach(s => {
-      });
     }
 
     if (Array.isArray(dataObj.debts)) {
-      if (ids.size > 0 || devices.size > 0) {
+      if (ids.size > 0 || devices.size > 0 || names.size > 0) {
         dataObj.debts = dataObj.debts.filter(d => {
-          if (d.deviceNumber && devices.has(String(d.deviceNumber).trim())) return false;
-          if (d.subscriberId && ids.has(String(d.subscriberId).trim())) return false;
+          const dDev = String(d.deviceNumber || '').trim();
+          const dDevClean = dDev.replace(/^00+/, '');
+          const dSubId = String(d.subscriberId || '').trim();
+          const dCust = this.normalizeSubscriberName(d.customerName);
+
+          if (dSubId && ids.has(dSubId)) return false;
+          if (this.isRealDeviceNumber(dDev) && (devices.has(dDev) || (dDevClean && devices.has(dDevClean)))) return false;
+          if (dCust && names.has(dCust)) return false;
           return true;
         });
       }
-      dataObj.debts.forEach(d => {
-      });
     }
 
     if (Array.isArray(dataObj.agentSettlements)) {
       dataObj.agentSettlements = dataObj.agentSettlements.filter(st => {
-        if (devices.size > 0 && st.deviceNumber && devices.has(String(st.deviceNumber).trim())) return false;
+        const stDev = String(st.deviceNumber || '').trim();
+        if (devices.size > 0 && this.isRealDeviceNumber(stDev) && devices.has(stDev)) return false;
         if (isPurgedAgent(st)) return false;
         return true;
       });
@@ -744,8 +864,13 @@ class SariSyncEngine {
 
     if (Array.isArray(dataObj.agentSubmissions)) {
       dataObj.agentSubmissions = dataObj.agentSubmissions.filter(sub => {
-        if (devices.size > 0 && sub.deviceNumber && devices.has(String(sub.deviceNumber).trim())) return false;
-        if (ids.size > 0 && sub.subscriberId && ids.has(String(sub.subscriberId).trim())) return false;
+        const subDev = String(sub.deviceNumber || '').trim();
+        const subId = String(sub.subscriberId || '').trim();
+        const subCust = this.normalizeSubscriberName(sub.customerName);
+
+        if (devices.size > 0 && this.isRealDeviceNumber(subDev) && devices.has(subDev)) return false;
+        if (ids.size > 0 && subId && ids.has(subId)) return false;
+        if (names.size > 0 && subCust && names.has(subCust)) return false;
         if (isPurgedAgent(sub)) return false;
         return true;
       });
@@ -843,6 +968,10 @@ class SariSyncEngine {
   }
 
   initFirebase() {
+    if (window.firestoreQuotaExceeded) {
+      console.warn('Firestore quota exceeded flag active. Operating in local persistence mode.');
+      return;
+    }
     if (typeof firebase === 'undefined') {
       console.warn('Firebase SDK not loaded, operating in local storage mode.');
       return;
@@ -1057,7 +1186,7 @@ class SariSyncEngine {
       collections.forEach((col, idx) => {
         const snap = results[idx];
         if (snap && !snap.empty) {
-          const remoteRecords = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          const remoteRecords = snap.docs.map(d => ({ docId: d.id, id: d.id, ...d.data() }));
           if (col === 'pricing') {
             const defDoc = remoteRecords.find(d => d.id === 'default') || remoteRecords[0];
             if (defDoc) this.data.pricing = defDoc;
@@ -1087,7 +1216,9 @@ class SariSyncEngine {
             });
             if (!uniqueUsers.some(u => (u.username || '').toLowerCase() === 'abodsari')) uniqueUsers.unshift(DEFAULT_USERS[0]);
             if (!uniqueUsers.some(u => (u.username || '').toLowerCase() === 'admin')) uniqueUsers.unshift(DEFAULT_USERS[1]);
-            this.data.users = uniqueUsers;
+            const tempUsersObj = { users: uniqueUsers };
+            this.applyTombstoneFilter(tempUsersObj);
+            this.data.users = tempUsersObj.users;
           } else if (col === 'subscribers') {
             const today = new Date().toISOString().substring(0, 10);
             remoteRecords.forEach(s => {
@@ -1099,7 +1230,9 @@ class SariSyncEngine {
             this.applyTombstoneFilter(tempObj);
             this.data.subscribers = tempObj.subscribers;
           } else {
-            this.data[col] = remoteRecords;
+            const tempObj = { [col]: remoteRecords };
+            this.applyTombstoneFilter(tempObj);
+            this.data[col] = tempObj[col];
           }
           updatedAny = true;
         }
@@ -1131,7 +1264,7 @@ class SariSyncEngine {
       // 1. Fetch fresh data specifically for subscribers from Central Firestore
       const snap = await this.db.collection('subscribers').get();
       if (!snap.empty) {
-        const freshSubscribers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const freshSubscribers = snap.docs.map(d => ({ docId: d.id, id: d.id, ...d.data() }));
         const today = new Date().toISOString().substring(0, 10);
         freshSubscribers.forEach(s => {
           const act = window.getSubscriberActiveStatus ? window.getSubscriberActiveStatus(s, today) : (s.status || 'فعال');
@@ -1537,7 +1670,7 @@ class SariSyncEngine {
     sharedCollections.forEach(col => {
       try {
         const unsub = this.db.collection(col).onSnapshot(snap => {
-          const remoteRecords = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          const remoteRecords = snap.docs.map(d => ({ docId: d.id, id: d.id, ...d.data() }));
           if (col === 'pricing') {
             const defaultDoc = remoteRecords.find(d => d.id === 'default') || remoteRecords[0];
             if (defaultDoc) this.data.pricing = defaultDoc;
@@ -1566,7 +1699,9 @@ class SariSyncEngine {
             });
             if (!uniqueUsers.some(u => (u.username || '').toLowerCase() === 'abodsari')) uniqueUsers.unshift(DEFAULT_USERS[0]);
             if (!uniqueUsers.some(u => (u.username || '').toLowerCase() === 'admin')) uniqueUsers.unshift(DEFAULT_USERS[1]);
-            this.data.users = uniqueUsers;
+            const tempUsersObj = { users: uniqueUsers };
+            this.applyTombstoneFilter(tempUsersObj);
+            this.data.users = tempUsersObj.users;
           } else if (col === 'subscribers') {
             const today = new Date().toISOString().substring(0, 10);
             remoteRecords.forEach(s => {
@@ -1578,7 +1713,9 @@ class SariSyncEngine {
             this.applyTombstoneFilter(tempObj);
             this.data.subscribers = tempObj.subscribers;
           } else {
-            this.data[col] = remoteRecords;
+            const tempObj = { [col]: remoteRecords };
+            this.applyTombstoneFilter(tempObj);
+            this.data[col] = tempObj[col];
           }
 
           // If current user is purged agent, logout immediately
@@ -1828,43 +1965,49 @@ class SariSyncEngine {
   }
 
   // Completely delete a subscriber and all related records across system, localStorage and Firestore
-  async deleteSubscriberCompletely(subscriberId, deviceNumberInput) {
+  async deleteSubscriberCompletely(subscriberId, deviceNumberInput, subscriberObj) {
     if (!this.isAdminUser()) {
       console.error('Unauthorized: Only admin can delete subscribers.');
       return;
     }
-    if (!subscriberId && !deviceNumberInput) return;
+    if (!subscriberId && !deviceNumberInput && !subscriberObj) return;
 
     // 1. Identify target subscriber
     const currentSubs = this.data.subscribers || [];
-    const targetSub = currentSubs.find(s => 
-      (subscriberId && s.id === subscriberId) || 
-      (deviceNumberInput && s.deviceNumber && String(s.deviceNumber).trim() === String(deviceNumberInput).trim())
-    );
+    const targetSub = subscriberObj || currentSubs.find(s => 
+      (subscriberId && (s.id === subscriberId || s.docId === subscriberId)) || 
+      (deviceNumberInput && s.deviceNumber && this.isRealDeviceNumber(deviceNumberInput) && String(s.deviceNumber).trim() === String(deviceNumberInput).trim())
+    ) || { id: subscriberId, deviceNumber: deviceNumberInput };
 
-    const subId = targetSub?.id || subscriberId;
-    const devNum = (targetSub?.deviceNumber || deviceNumberInput || '').trim();
-    const subName = (targetSub?.name || '').trim();
+    const subId = targetSub.id || subscriberId;
+    const docId = targetSub.docId || null;
+    const rawDev = (targetSub.deviceNumber || deviceNumberInput || '').trim();
+    const isRealDev = this.isRealDeviceNumber(rawDev);
+    const devNum = isRealDev ? rawDev : '';
+    const subName = (targetSub.name || '').trim();
+    const subPhone = (targetSub.phone || '').trim();
 
-    // 2. Mark permanent tombstones in localStorage
-    if (subId) this.addDeletedSubscriberTombstone(subId, null);
-    if (devNum) this.addDeletedSubscriberTombstone(null, devNum);
+    // 2. Mark permanent tombstones across all identifiers
+    this.addDeletedSubscriberTombstone(subId, devNum, subName, subPhone);
+    if (docId && docId !== subId) {
+      this.addDeletedSubscriberTombstone(docId, null, null, null);
+    }
 
     // 3. Find all related cascade records (sales, debts, settlements, submissions)
     const deletedSaleIds = [];
     (this.data.sales || []).forEach(s => {
-      if ((devNum && s.deviceNumber && String(s.deviceNumber).trim() === devNum) || 
-          (subId && s.subscriberId === subId) || 
-          (subName && s.customerName && s.customerName.trim() === subName)) {
+      if ((subId && s.subscriberId === subId) || 
+          (subName && s.customerName && s.customerName.trim() === subName) || 
+          (devNum && s.deviceNumber && String(s.deviceNumber).trim() === devNum)) {
         if (s.id) deletedSaleIds.push(s.id);
       }
     });
 
     const deletedDebtIds = [];
     (this.data.debts || []).forEach(d => {
-      if ((devNum && d.deviceNumber && String(d.deviceNumber).trim() === devNum) || 
-          (subId && d.subscriberId === subId) || 
-          (subName && d.customerName && d.customerName.trim() === subName)) {
+      if ((subId && d.subscriberId === subId) || 
+          (subName && d.customerName && d.customerName.trim() === subName) || 
+          (devNum && d.deviceNumber && String(d.deviceNumber).trim() === devNum)) {
         if (d.id) deletedDebtIds.push(d.id);
       }
     });
@@ -1878,15 +2021,19 @@ class SariSyncEngine {
 
     const deletedSubmissionIds = [];
     (this.data.agentSubmissions || []).forEach(sub => {
-      if ((devNum && sub.deviceNumber && String(sub.deviceNumber).trim() === devNum) || 
-          (subId && sub.subscriberId === subId)) {
+      if ((subId && sub.subscriberId === subId) || 
+          (subName && sub.customerName && sub.customerName.trim() === subName) || 
+          (devNum && sub.deviceNumber && String(sub.deviceNumber).trim() === devNum)) {
         if (sub.id) deletedSubmissionIds.push(sub.id);
       }
     });
 
     // 4. Immediately purge from in-memory state
+    const normSubName = this.normalizeSubscriberName(subName);
     this.data.subscribers = (this.data.subscribers || []).filter(s => {
-      if (subId && s.id === subId) return false;
+      if (subId && (s.id === subId || s.docId === subId)) return false;
+      if (docId && (s.id === docId || s.docId === docId)) return false;
+      if (normSubName && this.normalizeSubscriberName(s.name) === normSubName) return false;
       if (devNum && s.deviceNumber && String(s.deviceNumber).trim() === devNum) return false;
       return true;
     });
@@ -1910,8 +2057,8 @@ class SariSyncEngine {
     this.saveLocal();
     window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'all' } }));
 
-    // 6. Delete completely from Firestore
-    if (!window.firestoreQuotaExceeded && this.db && window.isFirebaseConfigured && window.isFirebaseConfigured()) {
+    // 6. Delete completely from Firestore (always attempt)
+    if (this.db && window.isFirebaseConfigured && window.isFirebaseConfigured()) {
       try {
         const batch = this.db.batch();
 
@@ -1920,16 +2067,26 @@ class SariSyncEngine {
           batch.delete(this.db.collection('subscribers').doc(subId));
           batch.delete(this.db.collection('appData').doc('subscribers').collection('records').doc(subId));
         }
-
-        // Search by deviceNumber query in subscribers and delete if different ID
-        if (devNum) {
-          try {
-            const devSnap1 = await this.db.collection('subscribers').where('deviceNumber', '==', devNum).get();
-            devSnap1.forEach(d => batch.delete(d.ref));
-            const devSnap2 = await this.db.collection('appData').doc('subscribers').collection('records').where('deviceNumber', '==', devNum).get();
-            devSnap2.forEach(d => batch.delete(d.ref));
-          } catch (e) {}
+        if (docId && docId !== subId) {
+          batch.delete(this.db.collection('subscribers').doc(docId));
+          batch.delete(this.db.collection('appData').doc('subscribers').collection('records').doc(docId));
         }
+
+        // Search by queries to delete any alternate Firestore docs
+        try {
+          if (subId) {
+            const snap1 = await this.db.collection('subscribers').where('id', '==', subId).get();
+            snap1.forEach(d => batch.delete(d.ref));
+          }
+          if (subName) {
+            const snap2 = await this.db.collection('subscribers').where('name', '==', subName).get();
+            snap2.forEach(d => batch.delete(d.ref));
+          }
+          if (devNum) {
+            const snap3 = await this.db.collection('subscribers').where('deviceNumber', '==', devNum).get();
+            snap3.forEach(d => batch.delete(d.ref));
+          }
+        } catch (e) {}
 
         // Delete cascade sales
         deletedSaleIds.forEach(id => {
@@ -1956,13 +2113,13 @@ class SariSyncEngine {
         });
 
         await batch.commit();
-        console.log(`[FirebaseSync] Subscriber ${subId} (${devNum}) and cascade records permanently deleted from Firestore.`);
+        console.log(`[FirebaseSync] Subscriber ${subId} (${subName || devNum}) permanently deleted from Firestore.`);
       } catch (err) {
         if (this.isQuotaError(err)) {
           markFirestoreQuotaExceeded();
-          console.warn('Firestore quota limit reached. Running in local persistence mode.');
+          console.warn('Firestore quota limit reached. Record deleted locally with persistent tombstone.');
         } else {
-          console.warn('Error deleting subscriber from Firestore:', err);
+          console.warn('Error deleting subscriber from Firestore (persisted locally with tombstone):', err);
         }
       }
     }
@@ -1975,17 +2132,26 @@ class SariSyncEngine {
       console.error('Unauthorized: Only admin can delete items.');
       return;
     }
+
+    if (collectionName === 'users') {
+      const targetUser = (this.data.users || []).find(u => u.uid === itemId || u.id === itemId || u.username === itemId);
+      this.addDeletedUserTombstone(itemId, targetUser?.username);
+    } else if (collectionName === 'subscribers') {
+      const targetSub = (this.data.subscribers || []).find(s => s.id === itemId || s.docId === itemId);
+      this.addDeletedSubscriberTombstone(itemId, targetSub?.deviceNumber, targetSub?.name, targetSub?.phone);
+    }
+
     // Strict immediate update of local in-memory state and localStorage
     this.data[collectionName] = (this.data[collectionName] || []).filter(item => {
       if (collectionName === 'users') {
-        return item.uid !== itemId && item.username !== itemId;
+        return item.uid !== itemId && item.username !== itemId && item.id !== itemId;
       }
       return item.id !== itemId;
     });
     this.saveLocal();
     window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: collectionName } }));
 
-    if (!window.firestoreQuotaExceeded && this.db && window.isFirebaseConfigured()) {
+    if (this.db && window.isFirebaseConfigured && window.isFirebaseConfigured()) {
       try {
         const batch = this.db.batch();
         batch.delete(this.db.collection(collectionName).doc(itemId));
@@ -1995,7 +2161,7 @@ class SariSyncEngine {
         }
         await batch.commit();
       } catch (err) {
-        if (err?.code === 'resource-exhausted' || err?.message?.includes('quota') || err?.message?.includes('Quota')) {
+        if (this.isQuotaError(err)) {
           markFirestoreQuotaExceeded();
           console.warn('Firestore quota limit reached. Running in local persistence mode.');
         } else {
@@ -2019,11 +2185,21 @@ class SariSyncEngine {
 
   // Completely wipe a collection (e.g. barcodes/codes reset) locally and in Firestore
   async clearCollection(collectionName) {
+    if (collectionName === 'subscribers') {
+      (this.data.subscribers || []).forEach(s => {
+        this.addDeletedSubscriberTombstone(s.id, s.deviceNumber, s.name, s.phone);
+      });
+      try {
+        localStorage.setItem('sari_all_subscribers_cleared', 'true');
+        localStorage.setItem('sari_subscribers_cleared_timestamp', String(Date.now()));
+      } catch (e) {}
+    }
+
     this.data[collectionName] = [];
     this.saveLocal();
     window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: collectionName } }));
 
-    if (!window.firestoreQuotaExceeded && this.db && window.isFirebaseConfigured()) {
+    if (this.db && window.isFirebaseConfigured && window.isFirebaseConfigured()) {
       try {
         // Clear from top-level collection
         const snap = await this.db.collection(collectionName).get();
@@ -2048,7 +2224,7 @@ class SariSyncEngine {
           }
         }
       } catch (err) {
-        if (err?.code === 'resource-exhausted' || err?.message?.includes('quota') || err?.message?.includes('Quota')) {
+        if (this.isQuotaError(err)) {
           markFirestoreQuotaExceeded();
           console.warn('Firestore quota limit reached. Running in local persistence mode.');
         } else {

@@ -669,14 +669,38 @@
         alert('يرجى اختيار ملف Excel أولاً');
         return;
       }
+
+      const file = fileInput.files[0];
+      window.closeModal();
+
+      if (window.HeaderImportProgress) {
+        window.HeaderImportProgress.start(`جاري قراءة ملف الأكواد (${file.name})...`, 12);
+      }
+
       const reader = new FileReader();
+      reader.onerror = () => {
+        if (window.HeaderImportProgress) {
+          window.HeaderImportProgress.error('فشل في قراءة ملف الأكواد، يرجى المحاولة مرة أخرى.');
+        } else {
+          alert('فشل في قراءة ملف الأكواد');
+        }
+      };
+
       reader.onload = async (e) => {
         try {
+          if (window.HeaderImportProgress) {
+            window.HeaderImportProgress.update(24, 'جاري تحليل الأكواد والباركود من الملف...');
+          }
+
           const workbook = XLSX.read(e.target.result, { type: 'binary', raw: true });
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
           const json = XLSX.utils.sheet_to_json(firstSheet, { header: 1, raw: false });
           if (json.length < 2) {
-            alert('الملف فارغ أو لا يحتوي على صفوف بيانات');
+            if (window.HeaderImportProgress) {
+              window.HeaderImportProgress.error('الملف فارغ أو لا يحتوي على صفوف بيانات.');
+            } else {
+              alert('الملف فارغ أو لا يحتوي على صفوف بيانات');
+            }
             return;
           }
 
@@ -692,8 +716,17 @@
           const newCodes = [];
           const today = new Date().toISOString().substring(0, 10);
           let duplicatesCount = 0;
+          const totalRows = json.length - 1;
 
           for (let r = 1; r < json.length; r++) {
+            if (r % 40 === 0 || r === totalRows) {
+              const currentPercent = Math.min(75, Math.floor(25 + ((r / totalRows) * 50)));
+              if (window.HeaderImportProgress) {
+                window.HeaderImportProgress.update(currentPercent, `جاري فحص الأكواد: تم فحص ${r} من ${totalRows}...`);
+              }
+              await new Promise(res => setTimeout(res, 0));
+            }
+
             const row = json[r];
             if (!row || !row[codeIdx]) continue;
             const rawNum = normalizeDigits(String(row[codeIdx] || '')).replace(/\D/g, '');
@@ -717,20 +750,36 @@
           }
 
           if (newCodes.length === 0) {
-            alert('لم يتم العثور على أرقام أجهزة جديدة صالحة للاستيراد (قد تكون مكررة أو غير صالحة)');
+            if (window.HeaderImportProgress) {
+              window.HeaderImportProgress.error('لم يتم العثور على أرقام أجهزة جديدة صالحة (قد تكون مكررة بالكامل)', 4500);
+            } else {
+              alert('لم يتم العثور على أرقام أجهزة جديدة صالحة للاستيراد (قد تكون مكررة أو غير صالحة)');
+            }
             return;
           }
 
+          if (window.HeaderImportProgress) {
+            window.HeaderImportProgress.update(85, `تم استخراج ${newCodes.length} كود جديد. جاري حفظ ومزامنة البيانات...`, 'syncing');
+          }
+
           await getEngine().commitData('codes', [...newCodes, ...existingCodes]);
+
+          if (window.HeaderImportProgress) {
+            window.HeaderImportProgress.success(`تم استيراد ${newCodes.length} كود بنجاح (تم تجاوز ${duplicatesCount} مكرر) والمزامنة بنجاح!`, 3200);
+          }
           window.showToast(`تم استيراد ${newCodes.length} كود بنجاح (تم تجاوز ${duplicatesCount} مكرر)`, 'success');
-          window.closeModal();
-          window.renderBarcodes(document.getElementById('main-content'));
+          if (window.currentPage === 'barcodes') {
+            window.renderBarcodes(document.getElementById('main-content'));
+          }
         } catch (err) {
           console.error(err);
-          alert('حدث خطأ أثناء قراءة ملف Excel: ' + err.message);
+          if (window.HeaderImportProgress) {
+            window.HeaderImportProgress.error('حدث خطأ أثناء استيراد الأكواد أو المزامنة: ' + err.message, 5000);
+          }
+          window.showToast('فشل الاستيراد أو تعذر المزامنة: ' + err.message, 'error');
         }
       };
-      reader.readAsBinaryString(fileInput.files[0]);
+      reader.readAsBinaryString(file);
     };
   };
 

@@ -1293,7 +1293,7 @@
   window.cancelSubscriberSubscription = window.confirmDeactivateSubscriber;
 
   window.deleteSubscriber = function(id) {
-    window.showConfirmModal('حذف المشترك', 'هل تريد حذف هذا المشترك نهائياً من النظام مع كافة سجلات المبيعات والديون المتعلقة به؟', async () => {
+    window.showConfirmModal('حذف المشترك نهائياً', 'هل تريد حذف هذا المشترك نهائياً من النظام مع كافة سجلات المبيعات والديون المتعلقة به؟ سيتم الحذف نهائياً ولن يعود عند إعادة تحميل الصفحة.', async () => {
       const data = getData();
       const subscriber = (data.subscribers || []).find(s => s.id === id);
       if (!subscriber) {
@@ -1301,45 +1301,31 @@
         return;
       }
 
-      const deviceNumber = (subscriber.deviceNumber || '').trim();
-      const otherSubs = (data.subscribers || []).filter(s => s.id !== id && s.deviceNumber && String(s.deviceNumber).trim() === deviceNumber);
+      const rawDev = (subscriber.deviceNumber || '').trim();
+      const isRealDevice = typeof getEngine().isRealDeviceNumber === 'function' 
+        ? getEngine().isRealDeviceNumber(rawDev) 
+        : (rawDev && rawDev !== '00' && rawDev !== '-' && rawDev.length >= 2);
+      const deviceNumber = isRealDevice ? rawDev : '';
 
-      if (otherSubs.length > 0) {
-        // Duplicate: delete this subscriber and activate the remaining subscriber(s)
-        const updatedSubscribers = (data.subscribers || []).filter(s => s.id !== id).map(s => {
-          if (s.deviceNumber && String(s.deviceNumber).trim() === deviceNumber) {
-            return { ...s, status: 'فعال' };
-          }
-          return s;
-        });
+      const otherSubsWithSameDevice = isRealDevice 
+        ? (data.subscribers || []).filter(s => s.id !== id && s.deviceNumber && String(s.deviceNumber).trim() === deviceNumber)
+        : [];
 
-        await getEngine().batchCommitData([
-          { collectionName: 'subscribers', items: updatedSubscribers }
-        ]);
-        window.showToast('تم حذف المشترك المكرر وتفعيل الرقم والمشترك المتبقي للجهة المسؤولة بنجاح', 'success');
+      if (typeof getEngine().deleteSubscriberCompletely === 'function') {
+        // If other subscribers share this device, pass deviceNumber as null so the other subscribers are not purged, but this subscriber is deleted completely
+        await getEngine().deleteSubscriberCompletely(id, otherSubsWithSameDevice.length > 0 ? null : deviceNumber, subscriber);
       } else {
-        // Complete deletion of subscriber and cascade records
-        if (typeof getEngine().deleteSubscriberCompletely === 'function') {
-          await getEngine().deleteSubscriberCompletely(id, deviceNumber);
-        } else {
-          const updatedSubscribers = (data.subscribers || []).filter(s => s.id !== id);
-          const updatedSales = (data.sales || []).filter(s => s.deviceNumber !== deviceNumber);
-          const updatedDebts = (data.debts || []).filter(d => d.deviceNumber !== deviceNumber);
-          const updatedSettlements = (data.agentSettlements || []).filter(st => st.deviceNumber !== deviceNumber);
-          const updatedSubmissions = (data.agentSubmissions || []).filter(sub => sub.deviceNumber !== deviceNumber);
-          await getEngine().batchCommitData([
-            { collectionName: 'subscribers', items: updatedSubscribers },
-            { collectionName: 'sales', items: updatedSales },
-            { collectionName: 'debts', items: updatedDebts },
-            { collectionName: 'agentSettlements', items: updatedSettlements },
-            { collectionName: 'agentSubmissions', items: updatedSubmissions }
-          ]);
-        }
-        window.showToast('تم حذف المشترك وكافة سجلاته المرتبطة نهائياً من البيانات بنجاح', 'success');
+        const updatedSubscribers = (data.subscribers || []).filter(s => s.id !== id);
+        data.subscribers = updatedSubscribers;
+        await getEngine().commitData('subscribers', updatedSubscribers);
       }
 
-      if (typeof window.renderSubscribers === 'function') window.renderSubscribers(document.getElementById('main-content'));
-    }, 'حذف المشترك', 'إلغاء', true);
+      window.showToast('تم حذف حساب المشترك وسجلاته نهائياً من النظام بنجاح', 'success');
+
+      if (typeof window.renderSubscribers === 'function') {
+        window.renderSubscribers(document.getElementById('main-content'));
+      }
+    }, 'حذف المشترك نهائياً', 'إلغاء', true);
   };
 
   window.requestRenewal = async function(subId) {
@@ -1918,6 +1904,14 @@
           });
         }
 
+        try {
+          localStorage.removeItem('sari_all_subscribers_cleared');
+          localStorage.removeItem('sari_subscribers_cleared_timestamp');
+        } catch (e) {}
+        if (getEngine() && typeof getEngine().unmarkTombstone === 'function') {
+          getEngine().unmarkTombstone(existing ? existing.id : null, deviceNumber, name);
+        }
+
         // Immediately close modal & update UI (Optimistic UI)
         window.closeModal();
         window.showToast('تم حفظ المشترك بنجاح', 'success');
@@ -2120,14 +2114,38 @@
         alert('يرجى اختيار ملف Excel أولاً');
         return;
       }
+
+      const file = fileInput.files[0];
+      window.closeModal();
+
+      if (window.HeaderImportProgress) {
+        window.HeaderImportProgress.start(`جاري قراءة ملف المشتركين (${file.name})...`, 12);
+      }
+
       const reader = new FileReader();
+      reader.onerror = () => {
+        if (window.HeaderImportProgress) {
+          window.HeaderImportProgress.error('فشل في قراءة ملف Excel، يرجى المحاولة مرة أخرى.');
+        } else {
+          alert('فشل في قراءة ملف Excel');
+        }
+      };
+
       reader.onload = async (e) => {
         try {
+          if (window.HeaderImportProgress) {
+            window.HeaderImportProgress.update(24, 'جاري تحليل وتدقيق ورقة بيانات المشتركين...');
+          }
+
           const workbook = XLSX.read(e.target.result, { type: 'binary', raw: true });
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
           const json = XLSX.utils.sheet_to_json(firstSheet, { header: 1, raw: false });
           if (json.length < 2) {
-            alert('الملف فارغ أو لا يحتوي على صفوف بيانات');
+            if (window.HeaderImportProgress) {
+              window.HeaderImportProgress.error('الملف فارغ أو لا يحتوي على صفوف بيانات.');
+            } else {
+              alert('الملف فارغ أو لا يحتوي على صفوف بيانات');
+            }
             return;
           }
 
@@ -2147,8 +2165,17 @@
           const data = getData();
           const existingSubs = [...(data.subscribers || [])];
           let importedCount = 0;
+          const totalRows = json.length - 1;
 
           for (let r = 1; r < json.length; r++) {
+            if (r % 40 === 0 || r === totalRows) {
+              const currentPercent = Math.min(75, Math.floor(25 + ((r / totalRows) * 50)));
+              if (window.HeaderImportProgress) {
+                window.HeaderImportProgress.update(currentPercent, `جاري استيراد المشتركين: تم فحص ${r} من ${totalRows}...`);
+              }
+              await new Promise(res => setTimeout(res, 0));
+            }
+
             const row = json[r];
             if (!row || !row[nameIdx]) continue;
             const name = String(row[nameIdx] || '').trim();
@@ -2191,15 +2218,40 @@
             }
           }
 
+          if (window.HeaderImportProgress) {
+            window.HeaderImportProgress.update(85, `تم استيراد ${importedCount} مشترك. جاري مزامنة وحفظ البيانات...`, 'syncing');
+          }
+
+          try {
+            localStorage.removeItem('sari_all_subscribers_cleared');
+            localStorage.removeItem('sari_subscribers_cleared_timestamp');
+          } catch (e) {}
+
+          // Unmark tombstones for freshly imported subscribers
+          if (getEngine() && typeof getEngine().unmarkTombstone === 'function') {
+            existingSubs.forEach(s => {
+              getEngine().unmarkTombstone(s.id, s.deviceNumber, s.name);
+            });
+          }
+
           await getEngine().commitData('subscribers', existingSubs);
+
+          if (window.HeaderImportProgress) {
+            window.HeaderImportProgress.success(`تم استيراد ${importedCount} مشترك والمزامنة بنجاح!`, 3200);
+          }
           window.showToast(`تم استيراد ${importedCount} مشترك بنجاح!`, 'success');
-          window.closeModal();
+          if (window.currentPage === 'subscribers') {
+            window.navigateTo('subscribers');
+          }
         } catch (err) {
           console.error(err);
-          alert('حدث خطأ أثناء قراءة ملف Excel: ' + err.message);
+          if (window.HeaderImportProgress) {
+            window.HeaderImportProgress.error('حدث خطأ أثناء استيراد البيانات والمزامنة: ' + err.message, 5000);
+          }
+          window.showToast('فشل الاستيراد أو تعذر المزامنة: ' + err.message, 'error');
         }
       };
-      reader.readAsBinaryString(fileInput.files[0]);
+      reader.readAsBinaryString(file);
     };
   };
 
@@ -2208,6 +2260,17 @@
       'حذف جميع المشتركين والتعاملات المالية',
       'هل أنت متأكد تماماً من رغبتك في حذف كافة المشتركين وسجل المبيعات والديون وكل التعاملات المالية المرتبطة بالزبائن دفعة واحدة؟ هذا الإجراء نهائي ولا يمكن التراجع عنه!',
       async () => {
+        const data = getData();
+        (data.subscribers || []).forEach(s => {
+          if (getEngine() && typeof getEngine().addDeletedSubscriberTombstone === 'function') {
+            getEngine().addDeletedSubscriberTombstone(s.id, s.deviceNumber, s.name, s.phone);
+          }
+        });
+        try {
+          localStorage.setItem('sari_all_subscribers_cleared', 'true');
+          localStorage.setItem('sari_subscribers_cleared_timestamp', String(Date.now()));
+        } catch (e) {}
+
         await getEngine().clearCollection('subscribers');
         await getEngine().clearCollection('sales');
         await getEngine().clearCollection('debts');

@@ -3536,3 +3536,251 @@ input[type="date"] {
   color: #fff;
   border-color: #b45309;
 }
+
+/* --------------------------------------------------------------------------
+   Header Custom Import & Sync Progress Bar (شريط تقدم استيراد البيانات أسفل الهيدر)
+   -------------------------------------------------------------------------- */
+.header-import-progress-container {
+  position: sticky;
+  top: 70px;
+  z-index: 89;
+  width: 100%;
+  background: var(--card-bg, #ffffff);
+  border-bottom: 2px solid var(--line);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  font-family: 'Cairo', 'Tajawal', sans-serif;
+  overflow: hidden;
+  box-sizing: border-box;
+  animation: slideDownProgressBar 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: background-color 0.3s ease, border-color 0.3s ease, opacity 0.3s ease;
+}
+
+@keyframes slideDownProgressBar {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes progressShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .header-import-progress-container {
+    top: 58px;
+  }
+}
+
+.header-import-progress-track {
+  width: 100%;
+  height: 5px;
+  background: rgba(0, 0, 0, 0.06);
+  position: relative;
+  overflow: hidden;
+}
+
+[data-theme="dark"] .header-import-progress-track {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.header-import-progress-fill {
+  height: 100%;
+  width: 0%;
+  transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease, box-shadow 0.3s ease;
+  position: relative;
+  border-radius: 0 2px 2px 0;
+}
+
+/* State: Importing / In Progress (Default) */
+.header-import-progress-container.state-importing {
+  background: var(--card-bg, #ffffff);
+  border-bottom-color: rgba(37, 99, 235, 0.3);
+}
+
+.header-import-progress-container.state-importing .header-import-progress-fill {
+  background: linear-gradient(90deg, #1d4ed8, #3b82f6, #60a5fa, #3b82f6, #1d4ed8);
+  background-size: 200% 100%;
+  animation: progressShimmer 2s linear infinite;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+}
+
+.header-import-progress-container.state-importing .header-import-progress-text {
+  color: var(--text, #1e293b);
+}
+
+.header-import-progress-container.state-importing .header-import-progress-percent {
+  background: rgba(37, 99, 235, 0.12);
+  color: #2563eb;
+  border: 1px solid rgba(37, 99, 235, 0.25);
+}
+
+[data-theme="dark"] .header-import-progress-container.state-importing .header-import-progress-percent {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+/* State: Syncing (مزامنة مع السيرفر) */
+.header-import-progress-container.state-syncing {
+  background: var(--card-bg, #ffffff);
+  border-bottom-color: rgba(14, 165, 233, 0.4);
+}
+
+.header-import-progress-container.state-syncing .header-import-progress-fill {
+  background: linear-gradient(90deg, #0284c7, #38bdf8, #0ea5e9);
+  background-size: 200% 100%;
+  animation: progressShimmer 1.5s linear infinite;
+  box-shadow: 0 0 12px rgba(14, 165, 233, 0.6);
+}
+
+.header-import-progress-container.state-syncing .header-import-progress-percent {
+  background: rgba(14, 165, 233, 0.15);
+  color: #0284c7;
+  border: 1px solid rgba(14, 165, 233, 0.3);
+}
+
+/* State: Success (أخضر للنجاح) */
+.header-import-progress-container.state-success {
+  background: #f0fdf4;
+  border-bottom-color: #10b981;
+}
+
+[data-theme="dark"] .header-import-progress-container.state-success {
+  background: #062817;
+  border-bottom-color: #059669;
+}
+
+.header-import-progress-container.state-success .header-import-progress-fill {
+  background: linear-gradient(90deg, #10b981, #059669, #34d399);
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.8);
+}
+
+.header-import-progress-container.state-success .header-import-progress-text {
+  color: #065f46;
+  font-weight: 700;
+}
+
+[data-theme="dark"] .header-import-progress-container.state-success .header-import-progress-text {
+  color: #6ee7b7;
+}
+
+.header-import-progress-container.state-success .header-import-progress-percent {
+  background: #10b981;
+  color: #ffffff;
+  border: 1px solid #059669;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+}
+
+/* State: Error (أحمر للخطأ) */
+.header-import-progress-container.state-error {
+  background: #fef2f2;
+  border-bottom-color: #ef4444;
+}
+
+[data-theme="dark"] .header-import-progress-container.state-error {
+  background: #2b0b0b;
+  border-bottom-color: #dc2626;
+}
+
+.header-import-progress-container.state-error .header-import-progress-fill {
+  background: linear-gradient(90deg, #ef4444, #dc2626, #f87171);
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.8);
+}
+
+.header-import-progress-container.state-error .header-import-progress-text {
+  color: #991b1b;
+  font-weight: 700;
+}
+
+[data-theme="dark"] .header-import-progress-container.state-error .header-import-progress-text {
+  color: #fca5a5;
+}
+
+.header-import-progress-container.state-error .header-import-progress-percent {
+  background: #ef4444;
+  color: #ffffff;
+  border: 1px solid #dc2626;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.3);
+}
+
+.header-import-progress-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 20px;
+  min-height: 38px;
+  gap: 12px;
+  box-sizing: border-box;
+}
+
+.header-import-progress-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  min-width: 0;
+  flex: 1;
+}
+
+.header-import-progress-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.header-import-progress-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.2px;
+}
+
+.header-import-progress-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.header-import-progress-percent {
+  font-size: 0.8rem;
+  font-weight: 800;
+  padding: 2px 10px;
+  border-radius: 999px;
+  min-width: 44px;
+  text-align: center;
+  letter-spacing: 0.5px;
+  transition: all 0.2s ease;
+}
+
+.header-import-progress-close-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--muted);
+  transition: background 0.15s, color 0.15s;
+}
+
+.header-import-progress-close-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--text);
+}
+

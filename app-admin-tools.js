@@ -2264,14 +2264,19 @@
   };
 
   window.deleteUser = function(uid) {
-    window.showConfirmModal('حذف الحساب', 'هل تريد حذف حساب المستخدم هذا نهائياً؟', async () => {
+    window.showConfirmModal('حذف الحساب نهائياً', 'هل تريد حذف حساب المستخدم هذا نهائياً؟ سيتم مسح الحساب ولن يعود عند إعادة تحميل الصفحة.', async () => {
+      const data = getData();
+      const targetUser = (data.users || []).find(u => u.uid === uid || u.id === uid);
+      if (getEngine() && typeof getEngine().addDeletedUserTombstone === 'function') {
+        getEngine().addDeletedUserTombstone(uid, targetUser?.username);
+      }
       await getEngine().deleteItem('users', uid);
-      window.showToast('تم حذف الحساب', 'success');
+      window.showToast('تم حذف الحساب نهائياً بنجاح', 'success');
       if (typeof window.renderUsers === 'function') {
         const mainEl = document.getElementById('main-content');
         if (mainEl) window.renderUsers(mainEl);
       }
-    }, 'حذف الحساب', 'إلغاء', true);
+    }, 'حذف الحساب نهائياً', 'إلغاء', true);
   };
 
   window.activateLegacyAccounts = function() {
