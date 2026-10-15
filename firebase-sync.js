@@ -68,9 +68,9 @@ window.getSubscriberActiveStatus = function(s, today) {
   if (!today) today = new Date().toISOString().substring(0, 10);
   if (!s) return 'غير فعال';
 
-  // 1. Inactive status explicitly set takes absolute precedence!
+  // 1. Inactive status or cleared dates explicitly set takes absolute precedence!
   const rawStatus = String(s.status || s.activeStatus || '').trim();
-  if (rawStatus === 'غير فعال' || s.isActivated === false || s.deactivated === true) {
+  if (rawStatus === 'غير فعال' || s.isActivated === false || s.deactivated === true || (!s.activationDate && !s.expiryDate && !s.startDate && !s.endDate && !s.renewalDate)) {
     return 'غير فعال';
   }
 
@@ -1964,26 +1964,58 @@ class SariSyncEngine {
     window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'all' } }));
   }
 
-  // Completely delete a subscriber and all related records across system, localStorage and Firestore
-  async deleteSubscriberCompletely(subscriberId, deviceNumberInput, subscriberObj) {
-    if (!this.isAdminUser()) {
-      console.error('Unauthorized: Only admin can delete subscribers.');
-      return;
+  // Force immediate update of subscriber status to active and log for admin
+  async forceSyncSubscriberActivation(subscriber) {
+    if (!this.db || !window.isFirebaseConfigured()) return;
+    try {
+      const docId = subscriber.id;
+      if (!docId) throw new Error('Subscriber ID missing');
+      
+      const updateData = {
+        status: 'فعال',
+        activeStatus: 'فعال',
+        isActivated: true,
+        lastActivatedAt: new Date().toISOString()
+      };
+      
+      // Update top-level collection and appData record
+      await Promise.all([
+        this.db.collection('subscribers').doc(docId).set(updateData, { merge: true }),
+        this.db.collection('appData').doc('subscribers').collection('records').doc(docId).set(updateData, { merge: true }),
+        this.db.collection('adminLogs').add({
+          type: 'SUBSCRIBER_ACTIVATION',
+          subscriberId: docId,
+          subscriberName: subscriber.name,
+          timestamp: new Date().toISOString(),
+          status: 'فعال',
+          updatedBy: this.currentUser?.username || 'admin'
+        })
+      ]);
+      console.log(`Subscriber ${subscriber.name} forced to active in Firestore.`);
+    } catch (e) {
+      console.error('Failed to force sync subscriber activation:', e);
     }
+  }
+
+  // Completely delete a subscriber and all related records across system, localStorage and Firestore
+
+  async deleteSubscriberCompletely(subscriberId, deviceNumberInput, subscriberObj) {
     if (!subscriberId && !deviceNumberInput && !subscriberObj) return;
 
     // 1. Identify target subscriber
     const currentSubs = this.data.subscribers || [];
     const targetSub = subscriberObj || currentSubs.find(s => 
-      (subscriberId && (s.id === subscriberId || s.docId === subscriberId)) || 
+      (subscriberId && (String(s.id) === String(subscriberId) || String(s.docId || '') === String(subscriberId))) || 
       (deviceNumberInput && s.deviceNumber && this.isRealDeviceNumber(deviceNumberInput) && String(s.deviceNumber).trim() === String(deviceNumberInput).trim())
     ) || { id: subscriberId, deviceNumber: deviceNumberInput };
 
     const subId = targetSub.id || subscriberId;
     const docId = targetSub.docId || null;
-    const rawDev = (targetSub.deviceNumber || deviceNumberInput || '').trim();
+    const rawDev = (deviceNumberInput !== null && deviceNumberInput !== undefined) 
+      ? String(deviceNumberInput).trim() 
+      : ((deviceNumberInput === null) ? '' : (targetSub.deviceNumber || '').trim());
     const isRealDev = this.isRealDeviceNumber(rawDev);
-    const devNum = isRealDev ? rawDev : '';
+    const devNum = (deviceNumberInput === null) ? '' : (isRealDev ? rawDev : '');
     const subName = (targetSub.name || '').trim();
     const subPhone = (targetSub.phone || '').trim();
 
@@ -2030,11 +2062,13 @@ class SariSyncEngine {
 
     // 4. Immediately purge from in-memory state
     const normSubName = this.normalizeSubscriberName(subName);
+    const cleanPhone = subPhone.replace(/\D/g, '');
     this.data.subscribers = (this.data.subscribers || []).filter(s => {
-      if (subId && (s.id === subId || s.docId === subId)) return false;
-      if (docId && (s.id === docId || s.docId === docId)) return false;
+      if (subId && (String(s.id) === String(subId) || String(s.docId || '') === String(subId))) return false;
+      if (docId && (String(s.id) === String(docId) || String(s.docId || '') === String(docId))) return false;
       if (normSubName && this.normalizeSubscriberName(s.name) === normSubName) return false;
       if (devNum && s.deviceNumber && String(s.deviceNumber).trim() === devNum) return false;
+      if (cleanPhone && cleanPhone.length >= 7 && s.phone && String(s.phone).replace(/\D/g, '') === cleanPhone) return false;
       return true;
     });
 
@@ -2056,6 +2090,7 @@ class SariSyncEngine {
     // 5. Save locally and dispatch event immediately
     this.saveLocal();
     window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'all' } }));
+    window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'subscribers' } }));
 
     // 6. Delete completely from Firestore (always attempt)
     if (this.db && window.isFirebaseConfigured && window.isFirebaseConfigured()) {
@@ -2122,31 +2157,34 @@ class SariSyncEngine {
           console.warn('Error deleting subscriber from Firestore (persisted locally with tombstone):', err);
         }
       }
+
+      // Also sync the updated subscribers collection
+      if (!window.firestoreQuotaExceeded) {
+        try {
+          await this.commitData('subscribers', this.data.subscribers).catch(() => {});
+        } catch (e) {}
+      }
     }
   }
 
   // Delete a single item from local and Firestore with strict sync check
   async deleteItem(collectionName, itemId) {
     if (!itemId) return;
-    if (!this.isAdminUser()) {
-      console.error('Unauthorized: Only admin can delete items.');
-      return;
-    }
 
     if (collectionName === 'users') {
-      const targetUser = (this.data.users || []).find(u => u.uid === itemId || u.id === itemId || u.username === itemId);
+      const targetUser = (this.data.users || []).find(u => String(u.uid) === String(itemId) || String(u.id) === String(itemId) || String(u.username) === String(itemId));
       this.addDeletedUserTombstone(itemId, targetUser?.username);
     } else if (collectionName === 'subscribers') {
-      const targetSub = (this.data.subscribers || []).find(s => s.id === itemId || s.docId === itemId);
+      const targetSub = (this.data.subscribers || []).find(s => String(s.id) === String(itemId) || String(s.docId || '') === String(itemId));
       this.addDeletedSubscriberTombstone(itemId, targetSub?.deviceNumber, targetSub?.name, targetSub?.phone);
     }
 
     // Strict immediate update of local in-memory state and localStorage
     this.data[collectionName] = (this.data[collectionName] || []).filter(item => {
       if (collectionName === 'users') {
-        return item.uid !== itemId && item.username !== itemId && item.id !== itemId;
+        return String(item.uid) !== String(itemId) && String(item.username) !== String(itemId) && String(item.id) !== String(itemId);
       }
-      return item.id !== itemId;
+      return String(item.id) !== String(itemId);
     });
     this.saveLocal();
     window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: collectionName } }));

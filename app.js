@@ -317,7 +317,7 @@
       case 'pending-requests': renderPendingRequests(mainEl); break;
       case 'agents': renderAgents(mainEl); break;
       case 'debts': renderDebts(mainEl); break;
-      case 'subscribers': renderSubscribers(mainEl); break;
+      case 'subscribers': window.renderSubscribers(mainEl); break;
       case 'barcodes': renderBarcodes(mainEl); break;
       case 'reports': renderReports(mainEl); break;
       case 'products': renderProducts(mainEl); break;
@@ -2233,6 +2233,8 @@
               });
             }
             getEngine().commitData('subscribers', subs).catch(err => console.warn('Subscribers sync warning:', err));
+            const subToSync = idx >= 0 ? subs[idx] : subs[subs.length - 1];
+            getEngine().forceSyncSubscriberActivation(subToSync).catch(err => console.warn('Immediate activation sync error:', err));
           }
 
           getEngine().commitData('sales', updatedSales).catch(err => console.warn('Sales sync warning:', err));

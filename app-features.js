@@ -666,12 +666,16 @@
           (s.status === 'فعال' ? '<div class="cell-date-range" style="direction: ltr; font-size: 0.8rem;"><div class="cell-date-from">بدء: ' + escapeHtml(s.activationDate || s.startDate || '-') + '</div><div class="cell-date-to">انتهاء: ' + escapeHtml(s.expiryDate || s.endDate || '-') + '</div></div>' : '<span style="color: var(--muted); font-size: 0.8rem;">-</span>') +
         '</td>' +
         '<td style="text-align: center;">' +
-          '<div class="action-btns" style="justify-content: center; gap: 4px; display: inline-flex; align-items: center;">' +
-            (waLink ? '<a href="' + waLink + '" target="_blank" class="icon-btn btn-whatsapp" title="مراسلة عبر واتساب">💬</a>' : '') +
-            '<button class="icon-btn" onclick="openSubscriberModal(\'' + s.id + '\')" title="تعديل بيانات المشترك">✏️</button>' +
-            '<button type="button" class="icon-btn btn-deactivate" onclick="window.confirmDeactivateSubscriber(' + JSON.stringify(s.id) + ')" title="إلغاء تفعيل اشتراك المشترك وتفريغ التواريخ والبيانات (زر خطأ ❌)" aria-label="إلغاء تفعيل اشتراك المشترك" style="color: #ef4444; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 3px 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;"><span style="font-size: 0.92rem; font-weight: 900; line-height: 1;">❌</span></button>' +
-            '<button class="icon-btn btn-del" onclick="deleteSubscriber(\'' + s.id + '\')" title="حذف المشترك نهائياً">🗑️</button>' +
-          '</div>' +
+          (() => {
+            const safeSubIdStr = String(s.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+            const safeSubIdAttr = escapeHtml(String(s.id || ''));
+            return '<div class="action-btns" style="justify-content: center; gap: 4px; display: inline-flex; align-items: center;">' +
+              (waLink ? '<a href="' + waLink + '" target="_blank" class="icon-btn btn-whatsapp" title="مراسلة عبر واتساب">💬</a>' : '') +
+              '<button type="button" class="icon-btn" onclick="openSubscriberModal(\'' + safeSubIdStr + '\')" title="تعديل بيانات المشترك">✏️</button>' +
+              '<button type="button" class="icon-btn btn-deactivate" data-sub-id="' + safeSubIdAttr + '" onclick="window.confirmDeactivateSubscriber(\'' + safeSubIdStr + '\')" title="إلغاء تفعيل اشتراك المشترك وتفريغ التواريخ والبيانات" aria-label="إلغاء تفعيل اشتراك المشترك" style="color: #ef4444; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 3px 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;"><span style="font-size: 0.92rem; font-weight: 900; line-height: 1; pointer-events: none;">❌</span></button>' +
+              '<button type="button" class="icon-btn btn-del" onclick="deleteSubscriber(\'' + safeSubIdStr + '\')" title="حذف المشترك نهائياً">🗑️</button>' +
+            '</div>';
+          })() +
         '</td>' +
       '</tr>';
     }).join('');
@@ -1156,7 +1160,12 @@
   window.confirmDeactivateSubscriber = function(subId) {
     console.log("confirmDeactivateSubscriber called for:", subId);
     const data = getData();
-    const subscriber = (data.subscribers || []).find(s => s.id === subId);
+    const subs = data.subscribers || [];
+    const subscriber = subs.find(s => 
+      String(s.id) === String(subId) || 
+      String(s.docId || '') === String(subId) || 
+      (s.deviceNumber && String(s.deviceNumber).trim() === String(subId).trim())
+    );
     if (!subscriber) {
       window.showToast("المشترك غير موجود", "error");
       return;
@@ -1204,9 +1213,10 @@
                 هل أنت متأكد من رغبتك في إطفاء وإلغاء تفعيل اشتراك هذا المشترك؟
               </p>
               <ul style="margin: 0; padding-right: 18px; font-size: 0.85rem; color: #7f1d1d; line-height: 1.6;">
-                <li>إرجاع حالة اشتراك المشترك إلى <strong>غير فعال</strong> فوراً.</li>
-                <li>تفريغ ومسح <strong>تواريخ البدء والانتهاء</strong> وتاريخ التفعيل.</li>
-                <li>تفريغ ومسح <strong>بيانات وطرق ومبالغ الدفع</strong> الخاصة بالاشتراك.</li>
+                <li>تحويل حالة الاشتراك إلى <strong>غير فعال</strong> في قاعدة البيانات والنظام فوراً.</li>
+                <li>تصفير (مسح) <strong>حقول تاريخ التجديد وتاريخ البدء وتاريخ التفعيل</strong>.</li>
+                <li>تصفير (مسح) <strong>حقول تاريخ الانتهاء والاستحقاق</strong>.</li>
+                <li>تصفير (مسح) <strong>كافة بيانات ومبالغ وطرق الدفع</strong> الخاصة بالاشتراك.</li>
               </ul>
             </div>
           </div>
@@ -1221,58 +1231,93 @@
       </div>
     `;
 
-    document.getElementById("confirm-deactivate-btn").onclick = async () => {
-      window.closeModal();
-      await window.executeDeactivateSubscriber(subId);
-    };
+    const targetSubId = subscriber.id || subId;
+    const confirmBtn = document.getElementById("confirm-deactivate-btn");
+    if (confirmBtn) {
+      confirmBtn.onclick = async () => {
+        window.closeModal();
+        await window.executeDeactivateSubscriber(targetSubId);
+      };
+    }
   };
 
   window.executeDeactivateSubscriber = async function(id) {
     try {
       const data = getData();
       const subs = data.subscribers || [];
-      const subscriber = subs.find(s => s.id === id);
+      const subscriber = subs.find(s => 
+        String(s.id) === String(id) || 
+        String(s.docId || '') === String(id) || 
+        (s.deviceNumber && String(s.deviceNumber).trim() === String(id).trim())
+      );
       if (!subscriber) {
         window.showToast("المشترك غير موجود", "error");
         return;
       }
 
-      // 1. Reset active status to inactive
+      // 1. Reset active status to inactive in local and DB
       subscriber.status = "غير فعال";
       subscriber.activeStatus = "غير فعال";
       subscriber.isActivated = false;
+      subscriber.is_active = false;
       subscriber.deactivated = true;
       subscriber.lastDeactivatedAt = new Date().toISOString();
+      subscriber.deactivatedAt = new Date().toISOString();
 
-      // 2. Clear subscription dates
+      // 2. Clear renewal, activation, and start date fields (تصفير حقول تاريخ التجديد)
       subscriber.activationDate = "";
       subscriber.startDate = "";
+      subscriber.renewalDate = "";
+      subscriber.lastRenewalDate = "";
+      subscriber.renewal = "";
+      subscriber.activation = "";
+
+      // 3. Clear expiry, end, and due date fields (تصفير حقول تاريخ الانتهاء)
       subscriber.expiryDate = "";
       subscriber.endDate = "";
       subscriber.dueDate = "";
+      subscriber.nextDueDate = "";
       subscriber.subscriptionType = "";
       subscriber.durationMonths = 0;
 
-      // 3. Clear payment data
+      // 4. Clear payment data (تصفير بيانات الدفع)
       subscriber.paymentStatus = "";
       subscriber.paymentMethod = "";
+      subscriber.paymentDate = "";
       subscriber.price = 0;
+      subscriber.amount = 0;
       subscriber.paidAmount = 0;
       subscriber.remainingAmount = 0;
+      subscriber.debtAmount = 0;
+      subscriber.hasDebt = false;
 
       data.subscribers = subs;
       if (getEngine() && typeof getEngine().saveLocal === "function") {
         getEngine().saveLocal();
       }
+      if (getEngine() && typeof getEngine().commitData === "function") {
+        await getEngine().commitData('subscribers', data.subscribers);
+      }
 
-      window.showToast(`تم إلغاء تفعيل اشتراك (${subscriber.name}) وتفريغ التواريخ والبيانات بنجاح (الحالة: غير فعال)`, "success");
+      window.showToast(`تم إلغاء تفعيل اشتراك (${subscriber.name}) وتصفير حقول التجديد والانتهاء وبيانات الدفع بنجاح (الحالة: غير فعال)`, "success");
       
       if (typeof window.renderSubscribers === "function") {
         window.renderSubscribers(document.getElementById("main-content"));
       }
 
-      if (getEngine() && typeof getEngine().commitData === "function") {
-        getEngine().commitData("subscribers", subs).catch(err => console.warn("Sync warning on deactivating subscriber:", err));
+      if (getEngine()) {
+        if (typeof getEngine().commitData === "function") {
+          getEngine().commitData("subscribers", subs).catch(err => console.warn("Sync warning on deactivating subscriber:", err));
+        }
+        if (getEngine().db && window.isFirebaseConfigured && window.isFirebaseConfigured() && !window.firestoreQuotaExceeded) {
+          const docId = subscriber.docId || subscriber.id;
+          if (docId) {
+            try {
+              getEngine().db.collection("subscribers").doc(docId).set(subscriber, { merge: true }).catch(() => {});
+              getEngine().db.collection("appData").doc("subscribers").collection("records").doc(docId).set(subscriber, { merge: true }).catch(() => {});
+            } catch (e) {}
+          }
+        }
       }
     } catch (err) {
       console.error("Error deactivating subscriber:", err);
@@ -1291,32 +1336,35 @@
 
   window.deactivateSubscriberWithConfirm = window.confirmDeactivateSubscriber;
   window.cancelSubscriberSubscription = window.confirmDeactivateSubscriber;
+  window.cancelSubscription = window.confirmDeactivateSubscriber;
+  window.cancelSub = window.confirmDeactivateSubscriber;
 
   window.deleteSubscriber = function(id) {
     window.showConfirmModal('حذف المشترك نهائياً', 'هل تريد حذف هذا المشترك نهائياً من النظام مع كافة سجلات المبيعات والديون المتعلقة به؟ سيتم الحذف نهائياً ولن يعود عند إعادة تحميل الصفحة.', async () => {
       const data = getData();
-      const subscriber = (data.subscribers || []).find(s => s.id === id);
-      if (!subscriber) {
-        window.showToast('المشترك غير موجود', 'error');
-        return;
-      }
-
-      const rawDev = (subscriber.deviceNumber || '').trim();
+      const subscriber = (data.subscribers || []).find(s => 
+        String(s.id) === String(id) || 
+        String(s.docId || '') === String(id) || 
+        (s.deviceNumber && String(s.deviceNumber).trim() === String(id).trim())
+      );
+      
+      const targetSub = subscriber || { id: id };
+      const rawDev = (targetSub.deviceNumber || '').trim();
       const isRealDevice = typeof getEngine().isRealDeviceNumber === 'function' 
         ? getEngine().isRealDeviceNumber(rawDev) 
         : (rawDev && rawDev !== '00' && rawDev !== '-' && rawDev.length >= 2);
       const deviceNumber = isRealDevice ? rawDev : '';
 
       const otherSubsWithSameDevice = isRealDevice 
-        ? (data.subscribers || []).filter(s => s.id !== id && s.deviceNumber && String(s.deviceNumber).trim() === deviceNumber)
+        ? (data.subscribers || []).filter(s => String(s.id) !== String(id) && s.deviceNumber && String(s.deviceNumber).trim() === deviceNumber)
         : [];
 
       if (typeof getEngine().deleteSubscriberCompletely === 'function') {
-        // If other subscribers share this device, pass deviceNumber as null so the other subscribers are not purged, but this subscriber is deleted completely
-        await getEngine().deleteSubscriberCompletely(id, otherSubsWithSameDevice.length > 0 ? null : deviceNumber, subscriber);
+        await getEngine().deleteSubscriberCompletely(targetSub.id || id, otherSubsWithSameDevice.length > 0 ? null : deviceNumber, targetSub);
       } else {
-        const updatedSubscribers = (data.subscribers || []).filter(s => s.id !== id);
+        const updatedSubscribers = (data.subscribers || []).filter(s => String(s.id) !== String(id));
         data.subscribers = updatedSubscribers;
+        if (typeof getEngine().saveLocal === 'function') getEngine().saveLocal();
         await getEngine().commitData('subscribers', updatedSubscribers);
       }
 
@@ -1493,14 +1541,37 @@
               </div>
 
             </div>
-            <div class="modal-footer" style="padding: 10px 18px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 10px;">
-              <button type="button" class="btn btn-secondary btn-sm" onclick="window.closeModal()" style="padding: 6px 16px; font-size: 0.88rem;">إلغاء</button>
-              <button type="submit" class="btn btn-success btn-sm" id="btn-asr-save" style="background-color: var(--green); color: #fff; padding: 6px 22px; font-size: 0.9rem; font-weight: 700;">💾 حفظ التفعيل</button>
+            <div class="modal-footer" style="padding: 10px 18px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+              <button type="button" class="btn btn-success btn-sm" onclick="window.shareRenewalWhatsApp(this)" data-phone="${escapeHtml(sub.phone || '')}" data-name="${escapeHtml(sub.name || '')}" data-device="${escapeHtml(sub.deviceNumber || '')}" style="background: #25D366; color: #fff; padding: 6px 14px; font-size: 0.85rem; font-weight: 700; border: none; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+                <span>💬</span> <span>مشاركة واتساب</span>
+              </button>
+              <div style="display: flex; gap: 8px;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="window.closeModal()" style="padding: 6px 16px; font-size: 0.88rem;">إلغاء</button>
+                <button type="submit" class="btn btn-success btn-sm" id="btn-asr-save" style="background-color: var(--green); color: #fff; padding: 6px 22px; font-size: 0.9rem; font-weight: 700;">💾 حفظ التفعيل</button>
+              </div>
             </div>
           </form>
         </div>
       </div>
     `;
+
+    window.shareRenewalWhatsApp = function(btn) {
+      const phone = btn ? btn.getAttribute('data-phone') : '';
+      const name = btn ? btn.getAttribute('data-name') : '';
+      const device = btn ? btn.getAttribute('data-device') : '';
+
+      const duration = document.getElementById('asr-duration')?.value || '1 شهر';
+      const price = document.getElementById('asr-price')?.value || '25,000';
+      const start = document.getElementById('asr-start')?.value || '';
+      const end = document.getElementById('asr-end')?.value || '';
+      const payment = document.getElementById('asr-payment')?.value || 'نقد';
+
+      const text = `السلام عليكم الأستاذ/ة ${name} 🌟\n\nتم تجديد/تفعيل اشتراككم في مركز الساري للبث الأرضي بنجاح 📡\n\n• كود الجهاز: ${device}\n• مدة الاشتراك: ${duration}\n• المبلغ الإجمالي: ${price} د.ع\n• تاريخ البدء: ${start}\n• تاريخ الانتهاء: ${end}\n• طريقة الدفع: ${payment}\n\nشكراً لتعاملكم مع مركز الساري للبث الأرضي - وكيل قنوات الرابعة الرياضية ⚽`;
+
+      const norm = window.normalizeIraqiPhone ? window.normalizeIraqiPhone(phone) : phone;
+      const url = norm ? `https://wa.me/${norm}?text=` + encodeURIComponent(text) : `https://wa.me/?text=` + encodeURIComponent(text);
+      window.open(url, '_blank');
+    };
 
     window.updateAdminSubscriberRenewalPrice = function() {
       const owner = document.getElementById('asr-owner')?.value || 'المركز الرئيسي';
@@ -1666,6 +1737,11 @@
       if (paymentMethod === 'دين') {
         data.debts = debts;
       }
+      
+      // Force immediate commit to ensure data persistence before UI update
+      await getEngine().commitData('subscribers', subs);
+      if (paymentMethod === 'دين') await getEngine().commitData('debts', debts);
+      await getEngine().commitData('sales', updatedSales);
 
       // Immediately close modal & update UI (Optimistic UI) for instant response
       window.closeModal();
@@ -1687,6 +1763,10 @@
         { collectionName: 'sales', items: updatedSales },
         ...(paymentMethod === 'دين' ? [{ collectionName: 'debts', items: debts }] : [])
       ]).catch(err => console.warn('Background sync error:', err));
+      
+      // Force immediate sync for activation status
+      getEngine().forceSyncSubscriberActivation(sub).catch(err => console.warn('Immediate activation sync error:', err));
+
 
     } catch (err) {
       console.error('Error in handleAdminSubscriberRenewalSubmit:', err);
@@ -2348,7 +2428,19 @@
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "المشتركون");
-    XLSX.writeFile(wb, `مشتركو_الساري_${new Date().toISOString().substring(0,10)}.xlsx`);
   };
+  // Delegated event listener for deactivate buttons to ensure clicks always invoke confirmation modal
+  document.addEventListener('click', function(e) {
+    const btn = e.target.closest('.btn-deactivate');
+    if (btn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const subId = btn.getAttribute('data-sub-id') || btn.getAttribute('data-subscriber-id');
+      if (subId && typeof window.confirmDeactivateSubscriber === 'function') {
+        window.confirmDeactivateSubscriber(subId);
+      }
+    }
+  });
 
 })();
+
