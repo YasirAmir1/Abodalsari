@@ -2056,6 +2056,17 @@
           </div>
         </div>
 
+        <div class="content-card" style="margin-bottom: 24px; border: 1px solid var(--danger);">
+          <div class="card-header-bar">
+            <h3 style="color: var(--danger);">⚠️ إدارة حصة استهلاك Firebase (Firestore Quota)</h3>
+          </div>
+          <p style="padding: 10px 16px;">حالة النظام الحالية: <strong>${window.firestoreQuotaExceeded ? 'تم تجاوز الحصة (العمل محلياً فقط)' : 'طبيعية'}</strong></p>
+          <div style="padding: 0 16px 16px 16px; display: flex; gap: 10px; flex-wrap: wrap;">
+            <button class="btn btn-secondary" onclick="window.syncEngine.resetQuota(); window.location.reload();">إعادة تعيين حالة الحصة (محاولة الاتصال مجدداً)</button>
+            <button class="btn btn-danger" onclick="window.clearAllDataUI()">مسح جميع البيانات والبدء من جديد</button>
+          </div>
+        </div>
+
         <div class="content-card" style="margin-bottom: 24px;">
           <div class="card-header-bar">
             <h3>🛡️ جدول الأدمن والمدراء</h3>

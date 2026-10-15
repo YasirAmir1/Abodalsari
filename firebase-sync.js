@@ -536,6 +536,15 @@ class SariSyncEngine {
     }
   }
 
+  resetQuota() {
+    window.firestoreQuotaExceeded = false;
+    try {
+      localStorage.removeItem('sari_firestore_quota_exceeded');
+      localStorage.removeItem('sari_firestore_quota_date');
+    } catch (e) {}
+    console.log('Firestore quota flag reset manually.');
+  }
+
   async clearAllData() {
     this.data = {
       subscribers: [],
@@ -552,13 +561,20 @@ class SariSyncEngine {
     this.saveLocal();
     window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'all' } }));
     
-    // Attempt to push empty data if not over quota
+    // Only attempt to sync if not in local-only mode
     if (!window.firestoreQuotaExceeded && this.db && window.isFirebaseConfigured()) {
        try {
-         await this.pushToFirestore('subscribers', []);
-         await this.pushToFirestore('sales', []);
-         // ... other collections
+         // Push empty arrays for essential collections to "clear" Firestore
+         await Promise.all([
+           this.pushToFirestore('subscribers', []),
+           this.pushToFirestore('sales', []),
+           this.pushToFirestore('debts', []),
+           this.pushToFirestore('agentSubmissions', [])
+         ]);
        } catch (e) {
+          if (this.isQuotaError(e)) {
+            markFirestoreQuotaExceeded();
+          }
           console.warn('Error clearing Firestore data:', e);
        }
     }
