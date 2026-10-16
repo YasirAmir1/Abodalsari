@@ -642,8 +642,8 @@
                           ownerClean === 'main' || 
                           ownerClean === 'hq';
 
-      // زر التجديد يظهر فقط لمشتركي المركز الرئيسي
-      const showRenewalBtn = isMainOwner;
+      // زر التجديد يظهر فقط للمشتركين غير الفعالين
+      const showRenewalBtn = isMainOwner && s.status !== 'فعال';
       
       return '<tr style="' + rowHighlightStyle + '">' +
         '<td>' +
@@ -951,21 +951,6 @@
             <div class="stat-card-header"><span class="stat-title">الاشتراكات المنتهية</span><div class="stat-icon">🔴</div></div>
             <div class="stat-value-group"><span class="stat-value" style="color: var(--danger);">${subs.length - activeCount}</span><span class="stat-unit">منتهي</span></div>
             <div class="stat-footer"><span>تحتاج إلى تجديد</span></div>
-          </div>
-          <div class="stat-card" style="${expiringSoonSubs.length > 0 ? 'border: 2px solid var(--warning);' : ''}">
-            <div class="stat-card-header">
-              <span class="stat-title">توشك على الانتهاء</span>
-              <div class="stat-icon">⏳</div>
-            </div>
-            <div class="stat-value-group">
-              <span class="stat-value" style="color: #b45309;">${expiringSoonSubs.length}</span>
-              <span class="stat-unit">خلال 7 أيام</span>
-            </div>
-            <div class="stat-footer">
-              <span style="color: ${expiringSoonSubs.length > 0 ? '#b45309' : 'var(--muted)'}; font-weight: 600;">
-                ${expiringSoonSubs.length > 0 ? '⚠️ تتطلب تذكيراً وتجديداً' : 'جميع الاشتراكات مستقرة'}
-              </span>
-            </div>
           </div>
           <div class="stat-card">
             <div class="stat-card-header"><span class="stat-title">الديون الحالية</span><div class="stat-icon">💰</div></div>
