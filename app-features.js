@@ -152,7 +152,7 @@
     });
 
     const statsHTML = Object.entries(agentStats).map(([name, stats]) => `
-      <div class="stat-card" style="min-width: 250px; flex: 1;">
+      <div class="stat-card" style="flex: 1;">
         <div class="stat-card-header"><span class="stat-title">${escapeHtml(name)}</span></div>
         <div style="font-size: 0.8rem; padding: 5px 0;">
           <div>مبيعات: ${formatNumber(stats.sales)}</div>
@@ -177,7 +177,7 @@
           </div>
         </div>
         
-        <div class="stat-grid" style="display: flex; gap: 10px; overflow-x: auto; margin-bottom: 24px;">
+        <div class="stat-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 24px;">
           ${statsHTML}
         </div>
 
