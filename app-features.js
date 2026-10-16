@@ -488,6 +488,10 @@
       await getEngine().commitData('sales', updatedSales);
       await getEngine().deleteItem('debts', id);
       window.showToast('تم حذف السجل بنجاح', 'success');
+      const mainEl = document.getElementById('main-content');
+      if (mainEl && typeof window.renderDebts === 'function') {
+        window.renderDebts(mainEl);
+      }
     }, 'حذف السجل', 'إلغاء', true);
   };
 
@@ -1389,9 +1393,7 @@
         if (getEngine().db && window.isFirebaseConfigured && window.isFirebaseConfigured() && !window.firestoreQuotaExceeded) {
           const docId = subscriber.docId || subscriber.id;
           if (docId) {
-            try {
               getEngine().db.collection("subscribers").doc(docId).set(subscriber, { merge: true }).catch(() => {});
-              getEngine().db.collection("appData").doc("subscribers").collection("records").doc(docId).set(subscriber, { merge: true }).catch(() => {});
             } catch (e) {}
           }
         }

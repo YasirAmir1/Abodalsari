@@ -382,6 +382,13 @@
           window.renderSubscribers(mainContent);
         }
       }
+      // Real-time update for debts list
+      if (e.detail?.collection === 'debts' || e.detail?.collection === 'all') {
+        const mainContent = document.getElementById('main-content');
+        if (mainContent && window.currentView === 'debts' && typeof window.renderDebts === 'function') {
+          window.renderDebts(mainContent);
+        }
+      }
     });
 
     // Login form submit

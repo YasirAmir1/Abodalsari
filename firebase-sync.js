@@ -6,16 +6,12 @@
 
 const STORAGE_KEY = 'sari-app-v1';
 
-// Persistent daily quota tracking
+// Persistent quota tracking
 try {
-  const today = new Date().toISOString().substring(0, 10);
-  const quotaDate = localStorage.getItem('sari_firestore_quota_date');
-  if (localStorage.getItem('sari_firestore_quota_exceeded') === 'true' && quotaDate === today) {
-    markFirestoreQuotaExceeded();
-    console.warn('Firestore daily write quota reached for today. Running in local persistence mode.');
-  } else if (quotaDate && quotaDate !== today) {
-    localStorage.removeItem('sari_firestore_quota_exceeded');
-    localStorage.removeItem('sari_firestore_quota_date');
+  if (localStorage.getItem('sari_firestore_quota_exceeded') === 'true') {
+    window.firestoreQuotaExceeded = true;
+    console.warn('Firestore write quota previously exceeded. Running in local persistence mode.');
+  } else {
     window.firestoreQuotaExceeded = false;
   }
 } catch (e) {}
@@ -580,9 +576,7 @@ class SariSyncEngine {
   loadQuotaState() {
     try {
       const exceeded = localStorage.getItem('sari_firestore_quota_exceeded');
-      const date = localStorage.getItem('sari_firestore_quota_date');
-      const today = new Date().toISOString().substring(0, 10);
-      if (exceeded === 'true' && date === today) {
+      if (exceeded === 'true') {
         window.firestoreQuotaExceeded = true;
       } else {
         window.firestoreQuotaExceeded = false;

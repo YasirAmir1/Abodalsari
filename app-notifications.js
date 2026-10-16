@@ -657,6 +657,38 @@
     }
   }
 
+  window.requestBrowserNotificationPermission = function() {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+      }
+    }
+  };
+
+  window.showBrowserNotification = function(title, options) {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'granted') {
+        try {
+          new Notification(title, {
+            icon: '/logo.png',
+            ...options
+          });
+        } catch (e) {}
+      } else if (Notification.permission === 'default') {
+        Notification.requestPermission().then(permission => {
+          if (permission === 'granted') {
+            try {
+              new Notification(title, {
+                icon: '/logo.png',
+                ...options
+              });
+            } catch (e) {}
+          }
+        }).catch(() => {});
+      }
+    }
+  };
+
   // Initialize notification events and interactions
   window.initNotificationsSystem = function() {
     // 0. Ensure markup exists in DOM even if cached HTML was rendered
@@ -670,6 +702,7 @@
     if (bellBtn) {
       bellBtn.onclick = function(e) {
         e.stopPropagation();
+        window.requestBrowserNotificationPermission();
         window.toggleNotificationDropdown();
       };
     }
@@ -702,7 +735,7 @@
       }
     });
 
-    // 6. Real-time Firestore sync event listener & new notification audio chime
+    // 6. Real-time Firestore sync event listener & new notification audio chime + browser notification
     let lastSeenNotifIds = null;
     window.addEventListener('sari:data-updated', function(e) {
       if (!e.detail || e.detail.collection === 'notifications' || e.detail.collection === 'all') {
@@ -710,16 +743,26 @@
         const currentIds = new Set(notifs.map(n => n.id));
         if (lastSeenNotifIds !== null) {
           let hasNew = false;
-          for (const id of currentIds) {
-            if (!lastSeenNotifIds.has(id)) {
+          let latestNotif = null;
+          for (const n of notifs) {
+            if (!lastSeenNotifIds.has(n.id)) {
               hasNew = true;
+              latestNotif = n;
               break;
             }
           }
-          if (hasNew && typeof window.playNotificationChime === 'function') {
+          if (hasNew) {
             const user = window.syncEngine?.currentUser;
             const role = (user && (user.role === 'admin' || user.role === 'أدمن' || user.role === 'مدير رئيسي')) ? 'admin' : 'agent';
-            window.playNotificationChime(false, role);
+            if (typeof window.playNotificationChime === 'function') {
+              window.playNotificationChime(false, role);
+            }
+            if (latestNotif) {
+              window.showBrowserNotification(latestNotif.title || 'إشعار جديد - شبكة الساري', {
+                body: latestNotif.message || latestNotif.body || 'لديك إشعار إداري جديد',
+                tag: latestNotif.id || 'broadcast'
+              });
+            }
           }
         }
         lastSeenNotifIds = currentIds;

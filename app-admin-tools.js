@@ -2664,8 +2664,14 @@
       lastAdminSubmissionIds = currentIds;
 
       if (newCount > 0) {
-        // 1. Play alert sound for Admin
+        // 1. Play alert sound for Admin & Browser Desktop Push Notification
         window.playNotificationChime(false, 'admin');
+        if (typeof window.showBrowserNotification === 'function') {
+          window.showBrowserNotification('طلب تجديد جديد - شبكة الساري', {
+            body: newCount === 1 ? 'وصول طلب تجديد جديد بانتظار اعتمادك!' : `وصول ${newCount} طلبات تجديد جديدة بانتظار اعتمادك!`,
+            tag: 'pending-requests'
+          });
+        }
 
         // 2. Visual Toast Alert
         if (typeof window.showToast === 'function') {
