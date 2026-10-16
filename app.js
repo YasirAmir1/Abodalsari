@@ -693,6 +693,39 @@
 
 
 
+        <!-- Agent Summary Cards -->
+        <div class="stat-grid" style="display: flex; gap: 10px; overflow-x: auto; margin-bottom: 24px;">
+          ${(() => {
+            const agentStats = { 'المركز الرئيسي': { sales: 0, paid: 0, debt: 0 } };
+            const agents = data.agents || [];
+            agents.forEach(a => agentStats[a.name] = { sales: 0, paid: 0, debt: 0 });
+
+            data.sales.forEach(s => {
+              const seller = s.seller || s.agentName || 'المركز الرئيسي';
+              const key = agentStats.hasOwnProperty(seller) ? seller : 'المركز الرئيسي';
+              agentStats[key].sales += Number(s.price) || 0;
+            });
+
+            data.debts.forEach(d => {
+              const seller = d.seller || d.agentName || 'المركز الرئيسي';
+              const key = agentStats.hasOwnProperty(seller) ? seller : 'المركز الرئيسي';
+              agentStats[key].paid += Number(d.paidAmount) || 0;
+              agentStats[key].debt += Number(d.remainingAmount) || 0;
+            });
+
+            return Object.entries(agentStats).map(([name, stats]) => `
+              <div class="stat-card" style="min-width: 220px; flex: 1;">
+                <div class="stat-card-header"><span class="stat-title">${escapeHtml(name)}</span></div>
+                <div style="font-size: 0.8rem; padding: 5px 0;">
+                  <div>مبيعات: ${formatNumber(stats.sales)}</div>
+                  <div>مسدد: ${formatNumber(stats.paid)}</div>
+                  <div style="color: var(--danger);">متبقي: ${formatNumber(stats.debt)}</div>
+                </div>
+              </div>
+            `).join('');
+          })()}
+        </div>
+
         <!-- Sales Chart Card -->
         <div class="content-card">
           <div class="card-header-bar">
