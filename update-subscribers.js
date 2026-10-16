@@ -30,8 +30,8 @@ if (typeLabelIdx !== -1 && returnTrIdx !== -1) {
                           ownerClean === 'main' || 
                           ownerClean === 'hq';
 
-      // زر التجديد يظهر فقط لمشتركي المركز الرئيسي وغير الفعالين، ويُخفى تماماً من أمام مشتركي الوكلاء
-      const showRenewalBtn = isMainOwner && s.status !== 'فعال';
+      // زر التجديد يظهر لجميع المشتركين لتفعيل وتجديد اشتراكاتهم مباشرة ورفع القيود
+      const showRenewalBtn = true;
       
       `;
   code = code.slice(0, typeLabelIdx) + newChunk + code.slice(returnTrIdx);

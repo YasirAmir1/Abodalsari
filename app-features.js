@@ -633,14 +633,14 @@
                           ownerClean === 'main' || 
                           ownerClean === 'hq';
 
-      // زر التجديد يظهر فقط لمشتركي المركز الرئيسي وغير الفعالين، ويُخفى تماماً من أمام مشتركي الوكلاء
-      const showRenewalBtn = isMainOwner;
+      // زر التجديد يظهر لجميع المشتركين لتفعيل وتجديد اشتراكاتهم مباشرة ورفع القيود
+      const showRenewalBtn = true;
       
       return '<tr style="' + rowHighlightStyle + '">' +
         '<td>' +
           '<div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap;">' +
             '<strong class="cell-title">' + escapeHtml(s.name) + '</strong>' +
-            (showRenewalBtn ? ('<button class="btn btn-sm btn-success" onclick="openAdminSubscriberRenewalModal(\'' + s.id + '\')" title="تجديد اشتراك مشترك المركز الرئيسي وتعديل البيانات" style="padding: 1px 6px; font-size: 0.72rem; border-radius: 4px; background: var(--success, #10b981); color: #fff; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;">🔄 تجديد</button>') : '') +
+            (showRenewalBtn ? ('<button class="btn btn-sm btn-success" onclick="openAdminSubscriberRenewalModal(\'' + String(s.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'") + '\')" title="تجديد وتفعيل الاشتراك وتعديل البيانات" style="padding: 1px 6px; font-size: 0.72rem; border-radius: 4px; background: var(--success, #10b981); color: #fff; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;">🔄 تجديد</button>') : '') +
           '</div>' +
           '<div class="cell-subtitle" style="direction: ltr; text-align: right;">' + escapeHtml(s.phone || '-') + '</div>' +
         '</td>' +
@@ -651,19 +651,19 @@
         '<td><span class="badge badge-neutral">' + escapeHtml(window.resolveAgentName ? window.resolveAgentName(s) : s.owner) + '</span></td>' +
 
         '<td style="text-align: center; white-space: nowrap;">' +
-          (s.status === 'فعال' ? '<span class="badge" style="font-weight: 700; font-size: 0.82rem; background: rgba(59, 130, 246, 0.1); color: #2563eb; border: 1px solid rgba(59, 130, 246, 0.25); padding: 3px 9px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">📅 ' + escapeHtml(typeLabel) + '</span>' : '<span style="color: var(--muted); font-size: 0.8rem;">-</span>') +
+          (typeLabel ? '<span class="badge" style="font-weight: 700; font-size: 0.82rem; background: rgba(59, 130, 246, 0.1); color: #2563eb; border: 1px solid rgba(59, 130, 246, 0.25); padding: 3px 9px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">📅 ' + escapeHtml(typeLabel) + '</span>' : '<span style="color: var(--muted); font-size: 0.8rem;">-</span>') +
         '</td>' +
         '<td style="text-align: center;">' +
-          (s.status === 'فعال' ? '<div class="cell-badges-group">' +
-            '<span class="badge badge-success">فعال</span>' +
+          '<div class="cell-badges-group">' +
+            (s.status === 'فعال' ? '<span class="badge badge-success" style="font-weight:700;">فعال</span>' : '<span class="badge badge-neutral" style="background: rgba(100, 116, 139, 0.12); color: #64748b; border: 1px solid rgba(100, 116, 139, 0.25);">غير فعال</span>') +
             (s.paymentStatus ? ('<span class="badge ' + (s.paymentStatus === 'مدفوع' ? 'badge-success' : ((s.paymentStatus === 'دين' || s.paymentStatus === 'غير مدفوع') ? 'badge-danger' : 'badge-neutral')) + '">' + escapeHtml(s.paymentStatus === 'غير مدفوع' ? 'دين' : s.paymentStatus) + '</span>') : '') +
-          '</div>' : '<div class="cell-badges-group"><span class="badge badge-neutral" style="background: rgba(100, 116, 139, 0.12); color: #64748b; border: 1px solid rgba(100, 116, 139, 0.25);">غير فعال</span></div>') +
+          '</div>' +
         '</td>' +
         '<td style="text-align: center; white-space: nowrap;">' +
-          (s.status === 'فعال' ? '<span style="font-weight: 800; font-size: 0.86rem; color: ' + amountColor + '; background: ' + amountBg + '; border: 1px solid ' + amountBorder + '; padding: 3px 9px; border-radius: 6px; display: inline-block; direction: ltr; font-family: monospace;">' + formatNumber(amount) + ' د.ع</span>' : '<span style="color: var(--muted); font-size: 0.8rem;">-</span>') +
+          '<span style="font-weight: 800; font-size: 0.86rem; color: ' + amountColor + '; background: ' + amountBg + '; border: 1px solid ' + amountBorder + '; padding: 3px 9px; border-radius: 6px; display: inline-block; direction: ltr; font-family: monospace;">' + formatNumber(amount) + ' د.ع</span>' +
         '</td>' +
         '<td style="text-align: center;">' +
-          (s.status === 'فعال' ? '<div class="cell-date-range" style="direction: ltr; font-size: 0.8rem;"><div class="cell-date-from">بدء: ' + escapeHtml(s.activationDate || s.startDate || '-') + '</div><div class="cell-date-to">انتهاء: ' + escapeHtml(s.expiryDate || s.endDate || '-') + '</div></div>' : '<span style="color: var(--muted); font-size: 0.8rem;">-</span>') +
+          '<div class="cell-date-range" style="direction: ltr; font-size: 0.8rem;"><div class="cell-date-from">بدء: ' + escapeHtml(s.activationDate || s.startDate || s.joiningDate || '-') + '</div><div class="cell-date-to">انتهاء: ' + escapeHtml(s.expiryDate || s.endDate || s.dueDate || '-') + '</div></div>' +
         '</td>' +
         '<td style="text-align: center;">' +
           (() => {
@@ -694,22 +694,78 @@
     const today = new Date().toISOString().substring(0, 10);
     const todayTime = new Date(today).getTime();
 
-    // Dynamic status check - identical across Headquarters and Agents
+    // Dynamic status check and sync with latest renewal sales
     subs.forEach(s => {
+      const dev = (s.deviceNumber || '').trim();
+      const devDigits = dev ? dev.replace(/\D/g, '') : '';
+      const name = (s.name || '').trim().toLowerCase();
+
+      // Find latest sale for this subscriber / device
+      const subSales = sales
+        .filter(sal => {
+          const sDev = (sal.deviceNumber || '').trim();
+          const sDevDigits = sDev ? sDev.replace(/\D/g, '') : '';
+          const sName = (sal.customerName || '').trim().toLowerCase();
+          return (dev && dev !== '-' && sDev && sDev === dev) ||
+                 (devDigits && sDevDigits && devDigits === sDevDigits) ||
+                 (name && sName && sName === name);
+        })
+        .sort((a, b) => new Date(b.createdAt || b.startDate || 0).getTime() - new Date(a.createdAt || a.startDate || 0).getTime());
+
+      if (subSales.length > 0) {
+        const latestSale = subSales[0];
+        const isRenewalSale = latestSale.saleType === 'تجديد اشتراك' || (latestSale.saleType && latestSale.saleType.includes('تجديد')) || (latestSale.endDate && latestSale.endDate >= today) || latestSale.status === 'فعال';
+
+        if (latestSale.endDate && latestSale.endDate !== '-') {
+          if (!s.expiryDate || s.expiryDate === '-' || isRenewalSale || latestSale.endDate >= today) {
+            s.expiryDate = latestSale.endDate;
+            s.endDate = latestSale.endDate;
+            s.dueDate = latestSale.endDate;
+          }
+        }
+        if (latestSale.startDate && latestSale.startDate !== '-') {
+          if (!s.activationDate || s.activationDate === '-' || !s.startDate || s.startDate === '-' || isRenewalSale) {
+            s.activationDate = latestSale.startDate;
+            s.startDate = latestSale.startDate;
+          }
+        }
+        if (latestSale.subscriptionType && latestSale.subscriptionType !== '-') {
+          if (!s.subscriptionType || s.subscriptionType === '-' || isRenewalSale) {
+            s.subscriptionType = latestSale.subscriptionType;
+          }
+        }
+        if (Number(latestSale.price) > 0) {
+          if (!s.price || Number(s.price) === 0 || isRenewalSale) {
+            s.price = Number(latestSale.price);
+          }
+        }
+        if (!s.paymentStatus || s.paymentStatus === '' || isRenewalSale) {
+          const isCash = latestSale.paymentMethod === 'نقد' || latestSale.paymentStatus === 'تم التسديد' || latestSale.paymentStatus === 'مدفوع';
+          s.paymentStatus = isCash ? 'مدفوع' : 'دين';
+          s.paymentMethod = latestSale.paymentMethod || (isCash ? 'نقد' : 'دين');
+        }
+        if (isRenewalSale || (latestSale.endDate && latestSale.endDate >= today)) {
+          s.status = 'فعال';
+          s.activeStatus = 'فعال';
+          s.isActivated = true;
+          s.is_active = true;
+          s.deactivated = false;
+          delete s.deactivated;
+        }
+      }
+
       s.status = typeof window.getSubscriberActiveStatus === "function" ? window.getSubscriberActiveStatus(s, today) : ((s.expiryDate && s.expiryDate >= today) || s.status === "فعال" ? "فعال" : "غير فعال");
       s.activeStatus = s.status;
-      if (s.status === "غير فعال" || s.deactivated === true || (!s.activationDate && !s.expiryDate)) {
-        s.paymentStatus = "";
-        s.paymentMethod = "";
-        s.price = 0;
-        s.paidAmount = 0;
-        s.remainingAmount = 0;
+      if (s.status === "فعال") {
+        s.deactivated = false;
+        delete s.deactivated;
+        s.isActivated = true;
+        s.is_active = true;
       }
     });
 
     function checkSubscriberPaid(s) {
-      // If inactive or deactivated or without dates, keep payment data completely empty
-      if (s.status === "غير فعال" || s.deactivated === true || (!s.activationDate && !s.expiryDate)) {
+      if (s.status === "غير فعال" && (!s.activationDate && !s.expiryDate)) {
         return "";
       }
       // 1. Direct saved payment status on subscriber takes precedence
@@ -744,19 +800,11 @@
       const hasDebt = debts.some(d => ((d.customerName && d.customerName.includes(s.name)) || (d.saleId && sales.find(sal => sal.id === d.saleId && sal.deviceNumber === s.deviceNumber))) && Number(d.remainingAmount) > 0);
       if (hasDebt) return "دين";
 
-      if (!s.activationDate || !s.expiryDate || !s.status) {
-        return "";
-      }
-
-      if (s.status === "غير فعال") {
-        return "";
-      }
-
       return "مدفوع";
     }
 
     subs.forEach(s => {
-      if (s.status !== "غير فعال" && !s.deactivated && (s.activationDate || s.expiryDate)) {
+      if (s.status === "فعال" || s.activationDate || s.expiryDate) {
         s.paymentStatus = checkSubscriberPaid(s);
       }
     });
@@ -1424,10 +1472,49 @@
   window.openAdminSubscriberRenewalModal = function(subId) {
     const data = getData();
     const agents = data.agents || [];
-    const sub = (data.subscribers || []).find(s => s.id === subId);
+    let sub = (data.subscribers || []).find(s => 
+      String(s.id) === String(subId) || 
+      String(s.docId) === String(subId) || 
+      String(s.deviceNumber) === String(subId) ||
+      String(s.name) === String(subId) ||
+      String(s.name || '').trim().toLowerCase() === String(subId || '').trim().toLowerCase()
+    );
     if (!sub) {
-      window.showToast('المشترك غير موجود', 'error');
-      return;
+      const sale = (data.sales || []).find(sal => String(sal.id) === String(subId) || String(sal.customerName) === String(subId) || String(sal.deviceNumber) === String(subId));
+      if (sale) {
+        sub = {
+          id: sale.id || ('sub-' + Date.now()),
+          docId: sale.id || ('sub-' + Date.now()),
+          name: sale.customerName || subId,
+          phone: sale.customerPhone || '',
+          deviceNumber: sale.deviceNumber || '',
+          owner: sale.seller || 'المركز الرئيسي',
+          subscriptionType: sale.subscriptionType || '1 شهر',
+          startDate: sale.startDate || new Date().toISOString().substring(0, 10),
+          expiryDate: sale.endDate || new Date().toISOString().substring(0, 10),
+          price: sale.price || 25000,
+          paymentMethod: sale.paymentMethod || 'نقد',
+          paymentStatus: sale.paymentStatus || 'مدفوع',
+          status: 'فعال'
+        };
+        data.subscribers = [...(data.subscribers || []), sub];
+      } else {
+        sub = {
+          id: 'sub-' + Date.now(),
+          docId: 'sub-' + Date.now(),
+          name: subId,
+          deviceNumber: '',
+          owner: 'المركز الرئيسي',
+          status: 'فعال',
+          subscriptionType: '1 شهر',
+          startDate: new Date().toISOString().substring(0, 10),
+          expiryDate: new Date().toISOString().substring(0, 10),
+          price: 25000,
+          paymentMethod: 'نقد',
+          paymentStatus: 'مدفوع'
+        };
+        data.subscribers = [...(data.subscribers || []), sub];
+      }
     }
 
     const modalContainer = document.getElementById('modal-container');
@@ -1442,9 +1529,13 @@
     if (sub.subscriptionType === '2 شهر' || sub.subscriptionType === 'اشتراك شهرين') initialMonths = 2;
     else if (sub.subscriptionType === '3 شهر' || sub.subscriptionType === 'اشتراك 3 أشهر') initialMonths = 3;
     else if (sub.subscriptionType === '6 شهر' || sub.subscriptionType === 'اشتراك 6 أشهر') initialMonths = 6;
-    else if (sub.subscriptionType === '1 سنة' || sub.subscriptionType === 'اشتراك سنة') initialMonths = 12;
+    else if (sub.subscriptionType === '1 سنة' || sub.subscriptionType === 'اشتراك سنة' || sub.subscriptionType === '12 شهر') initialMonths = 12;
 
     const initialEndDate = window.addMonthsToDate ? window.addMonthsToDate(initialStartDate, initialMonths) : initialStartDate;
+
+    const safeSubIdVal = escapeHtml(String(sub.id || ''));
+    const safeSubNameVal = escapeHtml(String(sub.name || ''));
+    const safeSubDevVal = escapeHtml(String(sub.deviceNumber || ''));
 
     modalContainer.innerHTML = `
       <div class="modal-overlay active" onclick="if (event.target === this) window.closeModal()">
@@ -1458,8 +1549,11 @@
             </div>
             <button type="button" class="modal-close" onclick="window.closeModal()">✕</button>
           </div>
-          <form id="admin-sub-ren-form" onsubmit="window.handleAdminSubscriberRenewalSubmit(event, '${sub.id}'); return false;">
-            <!-- Hidden joining date to keep data intact while hiding it from view -->
+          <form id="admin-sub-ren-form" onsubmit="window.handleAdminSubscriberRenewalSubmit(event, '${String(sub.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'); return false;">
+            <!-- Hidden identifiers to infallibly link and update subscriber without restrictions -->
+            <input type="hidden" id="asr-sub-id" value="${safeSubIdVal}">
+            <input type="hidden" id="asr-original-name" value="${safeSubNameVal}">
+            <input type="hidden" id="asr-original-device" value="${safeSubDevVal}">
             <input type="hidden" id="asr-joining" value="${escapeHtml(sub.joiningDate || today)}">
             <div class="modal-body" style="padding: 14px 18px; overflow: visible;">
               
@@ -1467,7 +1561,7 @@
               <div style="display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 10px; margin-bottom: 12px;">
                 <div class="form-group" style="margin: 0;">
                   <label style="font-size: 0.8rem; font-weight: 700; margin-bottom: 3px;">اسم المشترك *</label>
-                  <input type="text" id="asr-name" required value="${escapeHtml(sub.name || '')}" style="padding: 6px 10px; font-size: 0.88rem;">
+                  <input type="text" id="asr-name" required value="${safeSubNameVal}" style="padding: 6px 10px; font-size: 0.88rem;">
                 </div>
                 <div class="form-group" style="margin: 0;">
                   <label style="font-size: 0.8rem; font-weight: 700; margin-bottom: 3px;">رقم الهاتف</label>
@@ -1488,7 +1582,7 @@
                 <div style="display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 8px; border-left: 1px dashed var(--line); padding-left: 14px;">
                   <div class="form-group" style="margin: 0; width: 100%;">
                     <label style="font-size: 0.8rem; font-weight: 700; margin-bottom: 3px; display: block; text-align: center;">رقم الجهاز *</label>
-                    <input type="text" id="asr-device" required placeholder="رقم الجهاز..." value="${escapeHtml(sub.deviceNumber || '')}" oninput="updateRenewalQrCode(this.value)" style="padding: 6px 6px; font-size: 0.85rem; font-weight: 700; text-align: center; width: 100%;">
+                    <input type="text" id="asr-device" required placeholder="رقم الجهاز..." value="${safeSubDevVal}" oninput="updateRenewalQrCode(this.value)" style="padding: 6px 6px; font-size: 0.85rem; font-weight: 700; text-align: center; width: 100%;">
                   </div>
                   <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; background: #fff; padding: 8px; border-radius: 8px; border: 1px solid var(--line); box-shadow: 0 2px 6px rgba(0,0,0,0.06); width: fit-content; margin-top: 2px;">
                     <div id="asr-qr-box" style="width: 140px; height: 140px; display: flex; align-items: center; justify-content: center;"></div>
@@ -1503,9 +1597,11 @@
                     <div class="form-group" style="margin: 0;">
                       <label style="font-size: 0.8rem; font-weight: 700; margin-bottom: 3px;">نوع الاشتراك *</label>
                       <select id="asr-duration" onchange="updateAdminSubscriberRenewalPrice()" style="padding: 6px 8px; font-size: 0.85rem; font-weight: 700;">
-                        <option value="1 شهر" data-months="1" ${(!sub.subscriptionType || sub.subscriptionType === '1 شهر' || sub.subscriptionType === 'اشتراك شهر واحد') ? 'selected' : ''}>1 شهر</option>
-                        <option value="2 شهر" data-months="2" ${(sub.subscriptionType === '2 شهر' || sub.subscriptionType === 'اشتراك شهرين') ? 'selected' : ''}>2 شهر</option>
-                        <option value="3 شهر" data-months="3" ${(sub.subscriptionType === '3 شهر' || sub.subscriptionType === 'اشتراك 3 أشهر') ? 'selected' : ''}>3 شهر</option>
+                        <option value="1 شهر" data-months="1" ${(!sub.subscriptionType || sub.subscriptionType === '1 شهر' || sub.subscriptionType === 'اشتراك شهر واحد') ? 'selected' : ''}>1 شهر (شهر واحد)</option>
+                        <option value="2 شهر" data-months="2" ${(sub.subscriptionType === '2 شهر' || sub.subscriptionType === 'اشتراك شهرين') ? 'selected' : ''}>2 شهر (شهرين)</option>
+                        <option value="3 شهر" data-months="3" ${(sub.subscriptionType === '3 شهر' || sub.subscriptionType === 'اشتراك 3 أشهر') ? 'selected' : ''}>3 شهر (3 أشهر)</option>
+                        <option value="6 شهر" data-months="6" ${(sub.subscriptionType === '6 شهر' || sub.subscriptionType === 'اشتراك 6 أشهر') ? 'selected' : ''}>6 شهر (6 أشهر)</option>
+                        <option value="1 سنة" data-months="12" ${(sub.subscriptionType === '1 سنة' || sub.subscriptionType === 'اشتراك سنة' || sub.subscriptionType === '12 شهر') ? 'selected' : ''}>1 سنة (سنة كاملة)</option>
                       </select>
                     </div>
                     <div class="form-group" style="margin: 0;">
@@ -1533,21 +1629,21 @@
                   <div class="form-group" style="margin: 0;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
                       <label style="font-size: 0.8rem; font-weight: 700; margin: 0;">السعر الإجمالي (د.ع) *</label>
-                      <span style="font-size: 0.72rem; color: var(--muted);">محتسب تلقائياً حسب الوكيل وفترة الاشتراك</span>
+                      <span style="font-size: 0.72rem; color: var(--muted);">محتسب تلقائياً حسب فترة الاشتراك (قابل للتعديل)</span>
                     </div>
-                    <input type="text" id="asr-price" required value="25,000" readonly style="padding: 6px 10px; font-size: 0.95rem; font-weight: 800; color: var(--green); background: var(--surface); text-align: center;">
+                    <input type="text" id="asr-price" required value="25,000" style="padding: 6px 10px; font-size: 0.95rem; font-weight: 800; color: var(--green); background: var(--surface); text-align: center;">
                   </div>
                 </div>
               </div>
 
             </div>
             <div class="modal-footer" style="padding: 10px 18px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; gap: 10px;">
-              <button type="button" class="btn btn-success btn-sm" onclick="window.shareRenewalWhatsApp(this)" data-phone="${escapeHtml(sub.phone || '')}" data-name="${escapeHtml(sub.name || '')}" data-device="${escapeHtml(sub.deviceNumber || '')}" style="background: #25D366; color: #fff; padding: 6px 14px; font-size: 0.85rem; font-weight: 700; border: none; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+              <button type="button" class="btn btn-success btn-sm" onclick="window.shareRenewalWhatsApp(this)" data-phone="${escapeHtml(sub.phone || '')}" data-name="${safeSubNameVal}" data-device="${safeSubDevVal}" style="background: #25D366; color: #fff; padding: 6px 14px; font-size: 0.85rem; font-weight: 700; border: none; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
                 <span>💬</span> <span>مشاركة واتساب</span>
               </button>
               <div style="display: flex; gap: 8px;">
                 <button type="button" class="btn btn-secondary btn-sm" onclick="window.closeModal()" style="padding: 6px 16px; font-size: 0.88rem;">إلغاء</button>
-                <button type="submit" class="btn btn-success btn-sm" id="btn-asr-save" style="background-color: var(--green); color: #fff; padding: 6px 22px; font-size: 0.9rem; font-weight: 700;">💾 حفظ التفعيل</button>
+                <button type="submit" class="btn btn-success btn-sm" id="btn-asr-save" style="background-color: var(--green); color: #fff; padding: 6px 22px; font-size: 0.9rem; font-weight: 700;">💾 حفظ وتفعيل الاشتراك</button>
               </div>
             </div>
           </form>
@@ -1580,10 +1676,12 @@
       const months = selectedOption ? (Number(selectedOption.getAttribute('data-months')) || 1) : 1;
 
       const group = window.getAgentPricing ? window.getAgentPricing(owner) : { sub1: 25000, sub2: 50000, sub3: 75000 };
-      let price = group.sub1 || 25000;
+      let price = 25000;
       if (months === 1) price = group.sub1 || 25000;
       else if (months === 2) price = group.sub2 || ((group.sub1 || 25000) * 2);
       else if (months === 3) price = group.sub3 || ((group.sub1 || 25000) * 3);
+      else if (months === 6) price = group.sub6 || ((group.sub1 || 25000) * 6);
+      else if (months === 12) price = group.sub12 || ((group.sub1 || 25000) * 12);
       else price = (group.sub1 || 25000) * months;
 
       const priceInput = document.getElementById('asr-price');
@@ -1631,28 +1729,17 @@
     }
 
     try {
-      const data = getData();
-      const subs = data.subscribers || [];
-      const sub = subs.find(s => s.id === subId);
-      if (!sub) return;
-
       const name = document.getElementById('asr-name').value.trim();
       const phone = document.getElementById('asr-phone').value.trim();
       const deviceNumber = document.getElementById('asr-device').value.trim();
       const owner = document.getElementById('asr-owner').value;
+      const originalSubId = document.getElementById('asr-sub-id')?.value || subId;
+      const origDev = document.getElementById('asr-original-device')?.value || '';
+      const origName = document.getElementById('asr-original-name')?.value || '';
 
-      const currentUser = getEngine()?.currentUser;
-      const isAdmin = typeof window.isSystemAdmin === 'function' ? window.isSystemAdmin(currentUser) : (currentUser?.role === 'admin' || currentUser?.username === 'abodsari');
+      // تم رفع كافة القيود عن تفعيل وتجديد الاشتراكات ليتمكن المشرف من تجديد أي اشتراك معطل أو تابع لوكيل مباشرة
 
-      if (isAdmin && owner && owner !== 'المركز الرئيسي') {
-        window.showToast('عذراً، لا يمكن للرئيسية التفعيل المباشر لزبائن الوكلاء. يتم التفعيل حصرياً عبر طلبات الاعتماد المقدمة من الوكيل.', 'error');
-        if (submitBtn) {
-          submitBtn.disabled = false;
-          submitBtn.innerHTML = submitBtn.dataset.origHTML || 'حفظ';
-        }
-        return;
-      }
-      const joiningDate = document.getElementById('asr-joining')?.value || sub.joiningDate || new Date().toISOString().substring(0, 10);
+      const joiningDate = document.getElementById('asr-joining')?.value || new Date().toISOString().substring(0, 10);
       const startDate = document.getElementById('asr-start').value;
       const subscriptionType = document.getElementById('asr-duration').value;
       const endDate = document.getElementById('asr-end').value;
@@ -1661,30 +1748,105 @@
       const paymentStatus = paymentMethod === 'نقد' ? 'مدفوع' : 'دين';
       const salePaymentStatus = paymentMethod === 'نقد' ? 'تم التسديد' : 'دين';
 
-      // 1. Update subscriber with values from modal (تحويل حالة الزبون إلى فعال وتاريخ البدء والانتهاء والدفع)
-      sub.name = name;
-      sub.phone = phone;
-      sub.deviceNumber = deviceNumber;
-      sub.owner = owner;
-      sub.joiningDate = joiningDate;
-      sub.activationDate = startDate;
-      sub.startDate = startDate;
-      sub.expiryDate = endDate;
-      sub.endDate = endDate;
-      sub.dueDate = endDate;
-      sub.subscriptionType = subscriptionType;
-      sub.price = price;
-      sub.paymentMethod = paymentMethod;
-      sub.paymentStatus = paymentStatus;
-      sub.paidAmount = paymentMethod === 'نقد' ? price : 0;
-      sub.remainingAmount = paymentMethod === 'نقد' ? 0 : price;
-      sub.status = 'فعال';
-      sub.activeStatus = 'فعال';
-      sub.isActivated = true;
-      sub.lastActivatedAt = new Date().toISOString();
-      sub.activatedBy = 'المركز الرئيسي';
-      sub.activatedByType = 'hq';
-      sub.requestedByAgent = false;
+      const data = getData();
+      const subs = data.subscribers || [];
+      const subIdStr = String(originalSubId || subId || '').trim().toLowerCase();
+      const devDigits = deviceNumber ? deviceNumber.replace(/\D/g, '') : '';
+      const origDevDigits = origDev ? origDev.replace(/\D/g, '') : '';
+      const nameLower = name ? name.toLowerCase() : '';
+      const origNameLower = origName ? origName.toLowerCase() : '';
+
+      // Comprehensive matching of the subscriber
+      let sub = subs.find(s => {
+        const sId = String(s.id || '').trim().toLowerCase();
+        const sDocId = String(s.docId || '').trim().toLowerCase();
+        const sDev = String(s.deviceNumber || '').trim();
+        const sDevDigits = sDev ? sDev.replace(/\D/g, '') : '';
+        const sName = String(s.name || '').trim().toLowerCase();
+
+        return (subIdStr && (sId === subIdStr || sDocId === subIdStr)) ||
+               (origDev && sDev === origDev) ||
+               (origDevDigits && sDevDigits && origDevDigits === sDevDigits) ||
+               (origNameLower && sName === origNameLower) ||
+               (nameLower && sName === nameLower) ||
+               (deviceNumber && sDev && sDev === deviceNumber) ||
+               (devDigits && sDevDigits && devDigits === sDevDigits);
+      });
+
+      if (!sub) {
+        sub = {
+          id: 'sub-' + Date.now(),
+          docId: 'sub-' + Date.now(),
+          name: name,
+          phone: phone,
+          deviceNumber: deviceNumber,
+          owner: owner || 'المركز الرئيسي',
+          subscriptionType: subscriptionType,
+          joiningDate: joiningDate,
+          activationDate: startDate,
+          startDate: startDate,
+          expiryDate: endDate,
+          endDate: endDate,
+          dueDate: endDate,
+          price: price,
+          paymentMethod: paymentMethod,
+          paymentStatus: paymentStatus,
+          status: 'فعال',
+          activeStatus: 'فعال',
+          isActivated: true,
+          is_active: true
+        };
+        subs.push(sub);
+      }
+
+      // Update ALL instances in subs matching name or device number or ID
+      subs.forEach(s => {
+        const sId = String(s.id || '').trim().toLowerCase();
+        const sDocId = String(s.docId || '').trim().toLowerCase();
+        const sDev = String(s.deviceNumber || '').trim();
+        const sDevDigits = sDev ? sDev.replace(/\D/g, '') : '';
+        const sName = String(s.name || '').trim().toLowerCase();
+
+        const isMatch = (s === sub) ||
+          (subIdStr && (sId === subIdStr || sDocId === subIdStr)) ||
+          (origDev && sDev === origDev) ||
+          (origDevDigits && sDevDigits && origDevDigits === sDevDigits) ||
+          (origNameLower && sName === origNameLower) ||
+          (nameLower && sName === nameLower) ||
+          (deviceNumber && sDev && sDev === deviceNumber) ||
+          (devDigits && sDevDigits && devDigits === sDevDigits);
+
+        if (isMatch) {
+          s.name = name;
+          if (phone) s.phone = phone;
+          if (deviceNumber) s.deviceNumber = deviceNumber;
+          s.owner = owner;
+          s.joiningDate = s.joiningDate || joiningDate;
+          s.activationDate = startDate;
+          s.startDate = startDate;
+          s.expiryDate = endDate;
+          s.endDate = endDate;
+          s.dueDate = endDate;
+          s.subscriptionType = subscriptionType;
+          s.price = price;
+          s.paymentMethod = paymentMethod;
+          s.paymentStatus = paymentStatus;
+          s.paidAmount = paymentMethod === 'نقد' ? price : 0;
+          s.remainingAmount = paymentMethod === 'نقد' ? 0 : price;
+          s.status = 'فعال';
+          s.activeStatus = 'فعال';
+          s.isActivated = true;
+          s.is_active = true;
+          s.deactivated = false;
+          delete s.deactivated;
+          delete s.deactivatedAt;
+          delete s.lastDeactivatedAt;
+          s.lastActivatedAt = new Date().toISOString();
+          s.activatedBy = 'المركز الرئيسي';
+          s.activatedByType = 'hq';
+          s.requestedByAgent = false;
+        }
+      });
 
       // 2. Create new sale record
       const saleCode = (typeof window.generateSaleCode === 'function') ? window.generateSaleCode() : ('SR-' + Math.floor(10000 + Math.random() * 90000));
@@ -1703,6 +1865,8 @@
         paymentStatus: salePaymentStatus,
         paymentMethod: paymentMethod,
         agentPaid: paymentMethod === 'نقد' ? price : 0,
+        status: 'فعال',
+        activeStatus: 'فعال',
         createdAt: new Date().toISOString()
       };
 
@@ -1737,17 +1901,29 @@
       if (paymentMethod === 'دين') {
         data.debts = debts;
       }
-      
-      // Force immediate commit to ensure data persistence before UI update
-      await getEngine().commitData('subscribers', subs);
-      if (paymentMethod === 'دين') await getEngine().commitData('debts', debts);
-      await getEngine().commitData('sales', updatedSales);
+
+      // Sync with getEngine()
+      const engine = getEngine();
+      if (engine && engine.data) {
+        engine.data.subscribers = subs;
+        engine.data.sales = updatedSales;
+        if (paymentMethod === 'دين') engine.data.debts = debts;
+      }
+
+      // Save to local persistence immediately so data is NEVER lost
+      if (engine && typeof engine.saveLocal === 'function') {
+        engine.saveLocal();
+      }
 
       // Immediately close modal & update UI (Optimistic UI) for instant response
       window.closeModal();
       window.showToast('تم تفعيل وحفظ اشتراك الزبون (' + escapeHtml(name) + ') بنجاح - الحالة: فعال', 'success');
+
       if (typeof window.renderSubscribers === 'function') {
         window.renderSubscribers(document.getElementById('main-content'));
+      }
+      if (typeof window.renderReports === 'function' && window.currentView === 'reports') {
+        window.renderReports(document.getElementById('main-content'));
       }
 
       // Show invoice success modal with WhatsApp sharing for Headquarters renewal
@@ -1757,15 +1933,30 @@
         }
       }, 150);
 
-      // Sync to backend asynchronously in background without blocking UI
-      getEngine().batchCommitData([
-        { collectionName: 'subscribers', items: subs },
-        { collectionName: 'sales', items: updatedSales },
-        ...(paymentMethod === 'دين' ? [{ collectionName: 'debts', items: debts }] : [])
-      ]).catch(err => console.warn('Background sync error:', err));
-      
-      // Force immediate sync for activation status
-      getEngine().forceSyncSubscriberActivation(sub).catch(err => console.warn('Immediate activation sync error:', err));
+      // Async Firestore persistence with safety try/catch and quota handling
+      try {
+        console.log('[Renewal Flow] Starting Firestore commit for subscribers, sales, and debts...', {
+          subscriberCount: subs.length,
+          salesCount: updatedSales.length,
+          updatedSubscriber: sub
+        });
+        if (engine && typeof engine.commitData === 'function') {
+          await engine.commitData('subscribers', subs);
+          console.log('[Renewal Flow] Subscribers collection committed successfully to Firestore.');
+          if (paymentMethod === 'دين') {
+            await engine.commitData('debts', debts);
+            console.log('[Renewal Flow] Debts collection committed successfully to Firestore.');
+          }
+          await engine.commitData('sales', updatedSales);
+          console.log('[Renewal Flow] Sales collection committed successfully to Firestore.');
+          if (typeof engine.forceSyncSubscriberActivation === 'function') {
+            engine.forceSyncSubscriberActivation(sub).catch(err => console.warn('[Renewal Flow] forceSyncSubscriberActivation warning:', err));
+          }
+        }
+      } catch (syncErr) {
+        console.error('[Renewal Flow] Error during Firestore commit:', syncErr);
+        console.warn('Background sync warning (handled gracefully):', syncErr);
+      }
 
 
     } catch (err) {
@@ -1933,16 +2124,7 @@
         const status = document.getElementById('sub-active-status').value;
         const price = parseNumber(document.getElementById('sub-price').value) || 25000;
 
-        const currentUser = getEngine()?.currentUser;
-        const isAdmin = typeof window.isSystemAdmin === 'function' ? window.isSystemAdmin(currentUser) : (currentUser?.role === 'admin' || currentUser?.username === 'abodsari');
-
-        if (isAdmin && owner !== 'المركز الرئيسي' && status === 'فعال') {
-          window.showToast('عذراً، لا يمكن للرئيسية التفعيل المباشر لزبائن الوكلاء. يتم التفعيل حصرياً عبر طلبات الاعتماد المقدمة من الوكيل.', 'error');
-          const saveBtn = document.getElementById('btn-sub-save');
-          if (saveBtn) saveBtn.disabled = false;
-          return;
-        }
-
+        // تم رفع القيود للسماح للأدمن بحفظ وتفعيل أي مشترك مباشرة دون تعقيد
         const subs = data.subscribers || [];
 
         if (existing) {
@@ -1961,6 +2143,16 @@
           existing.status = status;
           existing.activeStatus = status;
           existing.price = price;
+          if (status === 'فعال') {
+            existing.isActivated = true;
+            existing.is_active = true;
+            existing.deactivated = false;
+            delete existing.deactivated;
+          } else {
+            existing.isActivated = false;
+            existing.is_active = false;
+            existing.deactivated = true;
+          }
           if (!existing.joiningDate) {
             existing.joiningDate = activationDate || today;
           }
@@ -1978,6 +2170,9 @@
             paymentStatus,
             paymentMethod: paymentStatus === 'مدفوع' ? 'نقد' : 'دين',
             price,
+            isActivated: status === 'فعال',
+            is_active: status === 'فعال',
+            deactivated: status !== 'فعال',
             activatedBy: 'المركز الرئيسي',
             activatedByType: 'hq',
             requestedByAgent: false
@@ -2414,20 +2609,55 @@
   };
 
   window.exportSubscribersExcel = function() {
+    if (typeof XLSX === 'undefined') {
+      window.showToast('مكتبة SheetJS قيد التحميل، يرجى المحاولة بعد لحظات', 'error');
+      return;
+    }
     const data = getData();
-    const rows = (data.subscribers || []).map(s => ({
-      'اسم المشترك': s.name,
-      'رقم الهاتف': s.phone,
-      'رقم الجهاز': "'" + s.deviceNumber,
-      'الجهة المالكة': s.owner,
-      'نوع الاشتراك': window.getSubscriberTypeLabel ? window.getSubscriberTypeLabel(s, data.sales) : (s.subscriptionType || '1 شهر'),
-      'الحالة': s.status,
-      'تاريخ التفعيل': s.activationDate,
-      'تاريخ الانتهاء': s.expiryDate
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows);
+    const today = new Date().toISOString().substring(0, 10);
+    const subs = data.subscribers || [];
+    const sales = data.sales || [];
+    const debts = data.debts || [];
+
+    // Ensure all subscribers have their latest status & dates synced
+    subs.forEach(s => {
+      if (typeof window.getSubscriberActiveStatus === 'function') {
+        s.status = window.getSubscriberActiveStatus(s, today);
+        s.activeStatus = s.status;
+      }
+    });
+
+    const rows = subs.map(s => {
+      const typeLabel = window.getSubscriberTypeLabel ? window.getSubscriberTypeLabel(s, sales) : (s.subscriptionType || '1 شهر');
+      let centerStatus = '-';
+      if (typeof window.getSubscriberMainSettlementStatus === 'function') {
+        const st = window.getSubscriberMainSettlementStatus(s, debts, sales);
+        centerStatus = st ? st.status : '-';
+      }
+      return {
+        'اسم المشترك': s.name || '-',
+        'رقم الهاتف': s.phone || '-',
+        'رقم الجهاز': "'" + (s.deviceNumber || '-'),
+        'الجهة المالكة': s.owner || 'المركز الرئيسي',
+        'نوع الاشتراك': typeLabel,
+        'حالة الاشتراك': s.status || 'فعال',
+        'حالة الدفع': s.paymentStatus || 'مدفوع',
+        'المبلغ (د.ع)': Number(s.price) || 25000,
+        'تاريخ التفعيل': s.activationDate || s.startDate || '-',
+        'تاريخ الانتهاء': s.expiryDate || s.endDate || '-',
+        'تسديد الرئيسية': centerStatus
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ 'تنبيه': 'لا توجد بيانات مشتركين' }]);
+    ws['!cols'] = [
+      { wch: 22 }, { wch: 15 }, { wch: 20 }, { wch: 18 }, { wch: 16 },
+      { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 18 }
+    ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "المشتركون");
+    XLSX.writeFile(wb, `مشتركي_الساري_${new Date().toISOString().substring(0, 10)}.xlsx`);
+    window.showToast('تم تصدير تقرير المشتركين بنجاح', 'success');
   };
   // Delegated event listener for deactivate buttons to ensure clicks always invoke confirmation modal
   document.addEventListener('click', function(e) {

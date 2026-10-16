@@ -2057,18 +2057,7 @@
         const paymentMethod = document.getElementById('sf-payment').value;
         const paymentStatus = paymentMethod === 'نقد' ? 'تم التسديد' : 'دين';
 
-        const currentUser = getEngine()?.currentUser;
-        const isAdmin = typeof window.isSystemAdmin === 'function' ? window.isSystemAdmin(currentUser) : (currentUser?.role === 'admin' || currentUser?.username === 'abodsari');
-
-        if (isAdmin && seller && seller !== 'المركز الرئيسي' && paymentMethod === 'نقد') {
-          window.showToast('عذراً، لا يمكن للرئيسية التفعيل المباشر لزبائن الوكلاء. يتم التفعيل حصرياً عبر طلبات الاعتماد المقدمة من الوكيل.', 'error');
-          if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = submitBtn.dataset.origHTML || 'تسجيل الفاتورة';
-          }
-          return;
-        }
-
+        // تم رفع القيود للسماح للأدمن بتسجيل الفواتير وتفعيل المشتركين مباشرة
         const data = getData();
         const allSales = data.sales || [];
         const existing = sId ? allSales.find(s => s.id === sId) : null;
@@ -2190,34 +2179,58 @@
           }
 
           // Auto update / register subscriber
-          if (deviceNumber) {
+          if (deviceNumber || customerName) {
             const subs = data.subscribers || [];
-            const idx = subs.findIndex(s => s.deviceNumber === deviceNumber);
+            const devDigits = deviceNumber ? deviceNumber.replace(/\D/g, '') : '';
+            const nameLower = customerName ? customerName.trim().toLowerCase() : '';
             const subExpiry = isNewDevice ? '-' : endDate;
-            if (idx >= 0) {
-              subs[idx].name = customerName;
-              subs[idx].phone = customerPhone || subs[idx].phone;
-              if (!isNewDevice) {
-                subs[idx].expiryDate = subExpiry;
-                subs[idx].endDate = subExpiry;
-                subs[idx].dueDate = subExpiry !== '-' ? subExpiry : '';
+
+            let matchFound = false;
+            subs.forEach(s => {
+              const sDev = (s.deviceNumber || '').trim();
+              const sDevDigits = sDev ? sDev.replace(/\D/g, '') : '';
+              const sName = (s.name || '').trim().toLowerCase();
+
+              const isMatch = (deviceNumber && sDev && sDev !== '-' && sDev === deviceNumber) ||
+                             (devDigits && sDevDigits && devDigits === sDevDigits) ||
+                             (nameLower && sName && sName === nameLower);
+
+              if (isMatch) {
+                matchFound = true;
+                s.name = customerName;
+                if (customerPhone) s.phone = customerPhone;
+                if (deviceNumber && deviceNumber !== '-') s.deviceNumber = deviceNumber;
+                if (seller) s.owner = seller;
+                if (!isNewDevice) {
+                  s.expiryDate = subExpiry;
+                  s.endDate = subExpiry;
+                  s.dueDate = subExpiry !== '-' ? subExpiry : '';
+                }
+                s.activationDate = startDate;
+                s.startDate = startDate;
+                s.paymentMethod = paymentMethod;
+                s.paymentStatus = paymentMethod === 'نقد' ? 'مدفوع' : 'دين';
+                s.subscriptionType = subscriptionType;
+                s.price = price;
+                s.status = 'فعال';
+                s.activeStatus = 'فعال';
+                s.isActivated = true;
+                s.is_active = true;
+                s.deactivated = false;
+                delete s.deactivated;
+                delete s.deactivatedAt;
+                delete s.lastDeactivatedAt;
+                if (!s.joiningDate) s.joiningDate = startDate || today;
               }
-              subs[idx].activationDate = startDate;
-              subs[idx].startDate = startDate;
-              subs[idx].paymentMethod = paymentMethod;
-              subs[idx].paymentStatus = paymentMethod === 'نقد' ? 'مدفوع' : 'دين';
-              subs[idx].subscriptionType = subscriptionType;
-              subs[idx].price = price;
-              subs[idx].status = 'فعال';
-              subs[idx].activeStatus = 'فعال';
-              if (!subs[idx].joiningDate) subs[idx].joiningDate = startDate || today;
-            } else {
+            });
+
+            if (!matchFound) {
               subs.push({
                 id: 'sub-' + Date.now(),
                 name: customerName,
-                phone: customerPhone,
-                deviceNumber: deviceNumber,
-                owner: seller,
+                phone: customerPhone || '',
+                deviceNumber: deviceNumber || '-',
+                owner: seller || 'المركز الرئيسي',
                 joiningDate: startDate || today,
                 activationDate: startDate,
                 startDate: startDate,
@@ -2229,17 +2242,34 @@
                 paymentStatus: paymentMethod === 'نقد' ? 'مدفوع' : 'دين',
                 price: price,
                 status: 'فعال',
-                activeStatus: 'فعال'
+                activeStatus: 'فعال',
+                isActivated: true,
+                is_active: true
               });
             }
+            data.subscribers = subs;
+            if (getEngine() && typeof getEngine().saveLocal === 'function') {
+              getEngine().saveLocal();
+            }
             getEngine().commitData('subscribers', subs).catch(err => console.warn('Subscribers sync warning:', err));
-            const subToSync = idx >= 0 ? subs[idx] : subs[subs.length - 1];
+            const subToSync = subs.find(s => (deviceNumber && s.deviceNumber === deviceNumber) || (customerName && s.name === customerName)) || subs[subs.length - 1];
             getEngine().forceSyncSubscriberActivation(subToSync).catch(err => console.warn('Immediate activation sync error:', err));
           }
 
+          data.sales = updatedSales;
+          if (getEngine() && typeof getEngine().saveLocal === 'function') {
+            getEngine().saveLocal();
+          }
           getEngine().commitData('sales', updatedSales).catch(err => console.warn('Sales sync warning:', err));
-          showToast('تم تسجيل وتفعيل الفاتورة بنجاح', 'success');
+          showToast('تم تسجيل وتفعيل الفاتورة وتحديث المشترك بنجاح', 'success');
           window.closeModal();
+
+          if (typeof window.renderSubscribers === 'function' && document.getElementById('subscribers-table-body')) {
+            window.renderSubscribers(document.getElementById('main-content'));
+          } else if (window.currentPage === 'sales' && typeof renderSales === 'function') {
+            renderSales(document.getElementById('main-content'));
+          }
+
           window.openSaleSuccessModal(newSale);
           return;
         }
@@ -2676,6 +2706,8 @@ ${customerPhone ? `📞 *الهاتف:* ${customerPhone}\n` : ""}📅 *فترة 
     if (subType === '1 شهر' || subType === 'اشتراك شهر واحد') months = 1;
     else if (subType === '2 شهر' || subType === 'اشتراك شهرين') months = 2;
     else if (subType === '3 شهر' || subType === 'اشتراك 3 أشهر') months = 3;
+    else if (subType === '6 شهر' || subType === 'اشتراك 6 أشهر') months = 6;
+    else if (subType === '1 سنة' || subType === 'اشتراك سنة' || subType === '12 شهر') months = 12;
 
     const endVal = window.addMonthsToDate(startVal, months);
     const endInput = document.getElementById('sf-end');
@@ -2700,6 +2732,9 @@ ${customerPhone ? `📞 *الهاتف:* ${customerPhone}\n` : ""}📅 *فترة 
       if (subType === '1 شهر' || subType === 'اشتراك شهر واحد') calculated = group.sub1 || 25000;
       else if (subType === '2 شهر' || subType === 'اشتراك شهرين') calculated = group.sub2 || 50000;
       else if (subType === '3 شهر' || subType === 'اشتراك 3 أشهر') calculated = group.sub3 || 75000;
+      else if (subType === '6 شهر' || subType === 'اشتراك 6 أشهر') calculated = group.sub6 || (group.sub1 ? group.sub1 * 6 : 150000);
+      else if (subType === '1 سنة' || subType === 'اشتراك سنة' || subType === '12 شهر') calculated = group.sub12 || (group.sub1 ? group.sub1 * 12 : 300000);
+      else calculated = group.sub1 || 25000;
     }
 
     priceInput.value = formatNumber(calculated);

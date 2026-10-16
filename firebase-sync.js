@@ -68,75 +68,120 @@ window.getSubscriberActiveStatus = function(s, today) {
   if (!today) today = new Date().toISOString().substring(0, 10);
   if (!s) return 'غير فعال';
 
-  // 1. Inactive status or cleared dates explicitly set takes absolute precedence!
   const rawStatus = String(s.status || s.activeStatus || '').trim();
-  if (rawStatus === 'غير فعال' || s.isActivated === false || s.deactivated === true || (!s.activationDate && !s.expiryDate && !s.startDate && !s.endDate && !s.renewalDate)) {
-    return 'غير فعال';
-  }
 
-  // 2. Direct active status from Headquarters record
-  if (rawStatus === 'فعال' || s.isActivated === true || s.is_active === true) {
-    return 'فعال';
-  }
-
-  // Explicit check for specific subscribers (Ahmed Moussa, Fouad Mohanad, Hussein Ali, Ahmed Thailab)
-  const nameNorm = window.normalizeSearchQuery ? window.normalizeSearchQuery(s.name || '') : String(s.name || '').toLowerCase();
-  if (
-    nameNorm.includes('ذيلب') || 
-    (nameNorm.includes('احمد') && nameNorm.includes('غثوان')) || (nameNorm.includes('أحمد') && nameNorm.includes('غثوان')) ||
-    (nameNorm.includes('احمد') && nameNorm.includes('موسى')) || (nameNorm.includes('أحمد') && nameNorm.includes('موسى')) ||
-    nameNorm.includes('فؤاد مهند') ||
-    nameNorm.includes('حسين علي ذياب') || (nameNorm.includes('حسين علي') && nameNorm.includes('ذياب'))
-  ) {
-    return 'فعال';
-  }
-
-  // Check agent submissions
+  // 1. Check linked sales first: Any renewal sale or sale with valid future/current end date
   try {
-    const engine = window.syncEngine;
-    if (engine && engine.data && Array.isArray(engine.data.agentSubmissions)) {
+    const engine = window.syncEngine || (typeof getEngine === 'function' ? getEngine() : null);
+    const allSales = (engine && engine.data && Array.isArray(engine.data.sales)) ? engine.data.sales : (window.getData ? (window.getData().sales || []) : []);
+    if (Array.isArray(allSales) && allSales.length > 0) {
       const dev = (s.deviceNumber || '').trim();
-      const name = (s.name || '').trim();
-      const matchedSub = engine.data.agentSubmissions.find(sub => 
-        (dev && dev !== '-' && sub.deviceNumber && String(sub.deviceNumber).trim() === dev) ||
-        (name && sub.customerName && String(sub.customerName).trim() === name)
-      );
-      if (matchedSub) {
-        return 'فعال';
-      }
-    }
-  } catch (e) {}
+      const devDigits = dev ? dev.replace(/\D/g, '') : '';
+      const name = (s.name || '').trim().toLowerCase();
 
-  // 2. Expiry date check with ISO normalization
-  const expRaw = s.expiryDate || s.endDate || s.dueDate;
-  if (expRaw && String(expRaw).trim() !== '-' && String(expRaw).trim() !== '') {
-    const expISO = window.normalizeDateToISO ? window.normalizeDateToISO(expRaw) : String(expRaw).trim();
-    if (expISO && expISO >= today) {
-      return 'فعال';
-    }
-  }
+      const matchingSales = allSales
+        .filter(sal => {
+          const sDev = (sal.deviceNumber || '').trim();
+          const sDevDigits = sDev ? sDev.replace(/\D/g, '') : '';
+          const sName = (sal.customerName || '').trim().toLowerCase();
+          return (dev && dev !== '-' && sDev && sDev === dev) ||
+                 (devDigits && sDevDigits && devDigits === sDevDigits) ||
+                 (name && sName && sName === name);
+        })
+        .sort((a, b) => new Date(b.createdAt || b.startDate || 0).getTime() - new Date(a.createdAt || a.startDate || 0).getTime());
 
-  // 3. Linked sales check: if subscriber has an active sale
-  try {
-    const engine = window.syncEngine;
-    if (engine && engine.data && Array.isArray(engine.data.sales)) {
-      const dev = (s.deviceNumber || '').trim();
-      const name = (s.name || '').trim();
-      const linkedSale = engine.data.sales.find(sal => 
-        (dev && dev !== '-' && sal.deviceNumber && String(sal.deviceNumber).trim() === dev) ||
-        (name && sal.customerName && String(sal.customerName).trim() === name)
-      );
-      if (linkedSale) {
-        const saleStatus = String(linkedSale.status || linkedSale.activeStatus || '').trim();
-        const saleEnd = window.normalizeDateToISO ? window.normalizeDateToISO(linkedSale.endDate) : (linkedSale.endDate || '');
-        if (saleStatus === 'فعال' || (saleEnd && saleEnd >= today)) {
+      if (matchingSales.length > 0) {
+        const latestSale = matchingSales[0];
+        const saleEnd = window.normalizeDateToISO ? window.normalizeDateToISO(latestSale.endDate) : (latestSale.endDate || '');
+        const saleStatus = String(latestSale.status || latestSale.activeStatus || '').trim();
+        const isRenewal = latestSale.saleType === 'تجديد اشتراك' || (latestSale.saleType && latestSale.saleType.includes('تجديد'));
+        const isActiveSale = saleStatus === 'فعال' || isRenewal || (saleEnd && saleEnd >= today);
+
+        // Dynamically populate subscriber fields from the latest sale
+        if (latestSale.endDate && latestSale.endDate !== '-') {
+          if (!s.expiryDate || s.expiryDate === '-' || isRenewal || latestSale.endDate >= today) {
+            s.expiryDate = latestSale.endDate;
+            s.endDate = latestSale.endDate;
+            s.dueDate = latestSale.endDate;
+          }
+        }
+        if (latestSale.startDate && latestSale.startDate !== '-') {
+          if (!s.activationDate || s.activationDate === '-' || !s.startDate || s.startDate === '-' || isRenewal) {
+            s.activationDate = latestSale.startDate;
+            s.startDate = latestSale.startDate;
+          }
+        }
+        if (latestSale.subscriptionType && latestSale.subscriptionType !== '-') {
+          if (!s.subscriptionType || s.subscriptionType === '-' || isRenewal) {
+            s.subscriptionType = latestSale.subscriptionType;
+          }
+        }
+        if (Number(latestSale.price) > 0) {
+          if (!s.price || Number(s.price) === 0 || isRenewal) {
+            s.price = Number(latestSale.price);
+          }
+        }
+        if (!s.paymentStatus || s.paymentStatus === '' || isRenewal) {
+          const isCash = latestSale.paymentMethod === 'نقد' || latestSale.paymentStatus === 'تم التسديد' || latestSale.paymentStatus === 'مدفوع';
+          s.paymentStatus = isCash ? 'مدفوع' : 'دين';
+          s.paymentMethod = latestSale.paymentMethod || (isCash ? 'نقد' : 'دين');
+        }
+
+        if (isActiveSale) {
+          s.status = 'فعال';
+          s.activeStatus = 'فعال';
+          s.isActivated = true;
+          s.is_active = true;
+          s.deactivated = false;
+          delete s.deactivated;
           return 'فعال';
         }
       }
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn('Error checking linked sales in getSubscriberActiveStatus:', e);
+  }
 
-  if (rawStatus === 'غير فعال') return 'غير فعال';
+  // 2. Explicit active status from renewal/reactivation takes absolute priority
+  if (rawStatus === 'فعال' || s.isActivated === true || s.is_active === true) {
+    const expRaw = s.expiryDate || s.endDate || s.dueDate;
+    if (expRaw && String(expRaw).trim() !== '-' && String(expRaw).trim() !== '') {
+      const expISO = window.normalizeDateToISO ? window.normalizeDateToISO(expRaw) : String(expRaw).trim();
+      if (expISO && expISO < today) {
+        return 'غير فعال'; // Actually expired
+      }
+    }
+    s.status = 'فعال';
+    s.activeStatus = 'فعال';
+    s.deactivated = false;
+    delete s.deactivated;
+    delete s.deactivatedAt;
+    delete s.lastDeactivatedAt;
+    return 'فعال';
+  }
+
+  // 3. Expiry date check with ISO normalization
+  const expRaw = s.expiryDate || s.endDate || s.dueDate;
+  if (expRaw && String(expRaw).trim() !== '-' && String(expRaw).trim() !== '') {
+    const expISO = window.normalizeDateToISO ? window.normalizeDateToISO(expRaw) : String(expRaw).trim();
+    if (expISO && expISO >= today) {
+      s.status = 'فعال';
+      s.activeStatus = 'فعال';
+      s.deactivated = false;
+      delete s.deactivated;
+      delete s.deactivatedAt;
+      delete s.lastDeactivatedAt;
+      return 'فعال';
+    } else if (expISO && expISO < today) {
+      return 'غير فعال';
+    }
+  }
+
+  // 4. Inactive or cleared dates
+  if (rawStatus === 'غير فعال' || s.deactivated === true || (!s.activationDate && !s.expiryDate && !s.startDate && !s.endDate && !s.renewalDate)) {
+    return 'غير فعال';
+  }
+
   return rawStatus || 'غير فعال';
 };
 
@@ -1972,6 +2017,17 @@ class SariSyncEngine {
       if (!docId) throw new Error('Subscriber ID missing');
       
       const updateData = {
+        name: subscriber.name,
+        phone: subscriber.phone,
+        deviceNumber: subscriber.deviceNumber,
+        owner: subscriber.owner,
+        subscriptionType: subscriber.subscriptionType,
+        price: subscriber.price,
+        paymentMethod: subscriber.paymentMethod,
+        paymentStatus: subscriber.paymentStatus,
+        startDate: subscriber.startDate,
+        expiryDate: subscriber.expiryDate,
+        activationDate: subscriber.activationDate,
         status: 'فعال',
         activeStatus: 'فعال',
         isActivated: true,

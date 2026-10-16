@@ -406,11 +406,8 @@
               // 5. Number of Active Subscriptions
               const refDate = filterEnd || filterStart || todayStr;
               const activeSubsCount = agentSubscribers.filter(s => {
-                if (s.status === 'فعال') return true;
-                if (s.expiryDate && s.activationDate) {
-                  return s.activationDate <= refDate && refDate <= s.expiryDate;
-                }
-                return false;
+                const actStatus = window.getSubscriberActiveStatus ? window.getSubscriberActiveStatus(s, refDate) : s.status;
+                return actStatus === 'فعال';
               }).length;
 
               // 6. Number of Inactive Subscriptions

@@ -126,6 +126,17 @@
     const data = getData();
     const agents = data.agents || [];
     const targets = data.agentTargets || [];
+    const allSubs = data.subscribers || [];
+
+    // Ensure all subscribers have their status and latest sales synchronized dynamically
+    allSubs.forEach(s => {
+      if (typeof window.getSubscriberActiveStatus === 'function') {
+        s.status = window.getSubscriberActiveStatus(s, today);
+        s.activeStatus = s.status;
+      }
+    });
+    const countActiveSubs = allSubs.filter(s => s.status === 'فعال').length;
+    const countInactiveSubs = allSubs.filter(s => s.status !== 'فعال').length;
 
     let selectedAgent = agents.find(a => a.id === window._lastSelectedTargetAgentId) || agents[0] || null;
     let selectedTargetObj = selectedAgent ? (targets.find(t => t.agentId === selectedAgent.id || t.id === selectedAgent.id) || null) : null;
@@ -330,7 +341,7 @@
           </div>
 
           <!-- Quick financial overview for backup -->
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 14px; padding-top: 14px; border-top: 1px dashed rgba(16, 124, 65, 0.25);">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 14px; padding-top: 14px; border-top: 1px dashed rgba(16, 124, 65, 0.25);">
             <div style="background: var(--card-bg); padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--line);">
               <div style="font-size: 0.78rem; color: var(--muted); font-weight: 600;">💰 إجمالي المبيعات المسجلة</div>
               <div style="font-size: 1.05rem; font-weight: 800; color: #107c41; margin-top: 2px;">${formatIQD((data.sales || []).reduce((sum, s) => sum + (Number(s.price) || 0), 0))}</div>
@@ -345,7 +356,15 @@
             </div>
             <div style="background: var(--card-bg); padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--line);">
               <div style="font-size: 0.78rem; color: var(--muted); font-weight: 600;">📡 إجمالي المشتركين</div>
-              <div style="font-size: 1.05rem; font-weight: 800; color: var(--text); margin-top: 2px;">${(data.subscribers || []).length} مشترك</div>
+              <div style="font-size: 1.05rem; font-weight: 800; color: var(--text); margin-top: 2px;">${allSubs.length} مشترك</div>
+            </div>
+            <div style="background: var(--card-bg); padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid rgba(16, 185, 129, 0.3);">
+              <div style="font-size: 0.78rem; color: #16a34a; font-weight: 700;">🟢 المشتركون الفعالون</div>
+              <div style="font-size: 1.05rem; font-weight: 800; color: #16a34a; margin-top: 2px;">${countActiveSubs} مشترك</div>
+            </div>
+            <div style="background: var(--card-bg); padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid rgba(239, 68, 68, 0.3);">
+              <div style="font-size: 0.78rem; color: #dc2626; font-weight: 700;">🔴 المشتركون غير الفعالين</div>
+              <div style="font-size: 1.05rem; font-weight: 800; color: #dc2626; margin-top: 2px;">${countInactiveSubs} مشترك</div>
             </div>
           </div>
         </div>
@@ -623,12 +642,29 @@
       return;
     }
     const data = getData();
+    const today = new Date().toISOString().substring(0, 10);
     const start = document.getElementById('rep-start-date')?.value || '';
     const end = document.getElementById('rep-end-date')?.value || '';
-    const filtered = filterByDate(data.subscribers || [], 'activationDate', start, end);
-
     const allDebts = data.debts || [];
     const allSales = data.sales || [];
+    const subs = data.subscribers || [];
+
+    // Ensure all subscribers have their status, dates, and amounts dynamically synchronized
+    subs.forEach(s => {
+      if (typeof window.getSubscriberActiveStatus === 'function') {
+        s.status = window.getSubscriberActiveStatus(s, today);
+        s.activeStatus = s.status;
+      }
+    });
+
+    const filtered = (start || end)
+      ? subs.filter(s => {
+          const d = s.activationDate || s.startDate || s.createdAt || '';
+          if (start && d < start) return false;
+          if (end && d > end) return false;
+          return true;
+        })
+      : subs;
 
     const rows = filtered.map(s => {
       let centerStatus = '-';
@@ -636,23 +672,26 @@
         const st = window.getSubscriberMainSettlementStatus(s, allDebts, allSales);
         centerStatus = st ? st.status : '-';
       }
+      const typeLabel = window.getSubscriberTypeLabel ? window.getSubscriberTypeLabel(s, allSales) : (s.subscriptionType || '1 شهر');
       return {
         'اسم المشترك': s.name || '-',
         'رقم الهاتف': s.phone || '-',
         'رقم الجهاز / الكارت': s.deviceNumber || '-',
-        'جهة البيع / الوكيل': s.owner || '-',
-        'تاريخ التفعيل': s.activationDate || '-',
-        'تاريخ الانتهاء': s.expiryDate || '-',
-        'الحالة': s.status || 'نشط',
-        'تم التسديد للرئيسية': centerStatus,
-        'المبلغ المدفوع (د.ع)': Number(s.price) || 0
+        'جهة البيع / الوكيل': s.owner || 'المركز الرئيسي',
+        'نوع الاشتراك': typeLabel,
+        'تاريخ التفعيل': s.activationDate || s.startDate || '-',
+        'تاريخ الانتهاء': s.expiryDate || s.endDate || '-',
+        'حالة الاشتراك': s.status || 'فعال',
+        'حالة الدفع': s.paymentStatus || 'مدفوع',
+        'المبلغ المدفوع (د.ع)': Number(s.price) || 25000,
+        'تم التسديد للرئيسية': centerStatus
       };
     });
 
     const ws = XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ 'تنبيه': 'لا توجد بيانات مشتركين' }]);
     ws['!cols'] = [
-      { wch: 22 }, { wch: 15 }, { wch: 20 }, { wch: 18 }, { wch: 14 },
-      { wch: 14 }, { wch: 12 }, { wch: 18 }, { wch: 16 }
+      { wch: 22 }, { wch: 15 }, { wch: 20 }, { wch: 18 }, { wch: 16 },
+      { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 16 }
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "المشتركين");
@@ -848,10 +887,18 @@
       const allSettlements = data.agentSettlements || [];
       const targets = data.agentTargets || [];
 
+      // Harmonize subscribers with latest sales, dates, amounts, and active status
+      allSubscribers.forEach(s => {
+        if (typeof window.getSubscriberActiveStatus === 'function') {
+          s.status = window.getSubscriberActiveStatus(s, today);
+          s.activeStatus = s.status;
+        }
+      });
+
       const filteredSales = allSales.filter(s => inDateRange(s.startDate || s.date || s.createdAt));
       const filteredDebts = allDebts.filter(d => inDateRange(d.date || d.dueDate || d.createdAt));
       const filteredSettlements = allSettlements.filter(st => inDateRange(st.date || st.createdAt));
-      const filteredSubscribers = allSubscribers.filter(sub => inDateRange(sub.activationDate || sub.createdAt));
+      const filteredSubscribers = allSubscribers.filter(sub => inDateRange(sub.activationDate || sub.startDate || sub.createdAt));
 
       // 1. Calculations for Financial Summary
       let totalSalesVolume = 0;
@@ -1085,22 +1132,25 @@
           const st = window.getSubscriberMainSettlementStatus(sub, allDebts, allSales);
           centerStatus = st ? st.status : '-';
         }
+        const typeLabel = window.getSubscriberTypeLabel ? window.getSubscriberTypeLabel(sub, allSales) : (sub.subscriptionType || '1 شهر');
         return {
           'اسم المشترك': sub.name || '-',
           'رقم الهاتف': sub.phone || '-',
           'رقم الجهاز / الكارت': sub.deviceNumber || '-',
-          'جهة البيع / الوكيل': sub.owner || '-',
-          'تاريخ التفعيل': sub.activationDate || '-',
-          'تاريخ الانتهاء': sub.expiryDate || '-',
-          'حالة الاشتراك': sub.status || 'نشط',
-          'تم التسديد للرئيسية': centerStatus,
-          'المبلغ المدفوع (د.ع)': Number(sub.price) || 0
+          'جهة البيع / الوكيل': sub.owner || 'المركز الرئيسي',
+          'نوع الاشتراك': typeLabel,
+          'حالة الاشتراك': sub.status || 'فعال',
+          'حالة الدفع': sub.paymentStatus || 'مدفوع',
+          'المبلغ (د.ع)': Number(sub.price) || 25000,
+          'تاريخ التفعيل': sub.activationDate || sub.startDate || '-',
+          'تاريخ الانتهاء': sub.expiryDate || sub.endDate || '-',
+          'تم التسديد للرئيسية': centerStatus
         };
       });
       const wsSubs = XLSX.utils.json_to_sheet(subsData.length > 0 ? subsData : [{ 'تنبيه': 'لا يوجد مشتركون' }]);
       wsSubs['!cols'] = [
-        { wch: 22 }, { wch: 15 }, { wch: 20 }, { wch: 18 }, { wch: 14 },
-        { wch: 14 }, { wch: 12 }, { wch: 18 }, { wch: 16 }
+        { wch: 22 }, { wch: 15 }, { wch: 20 }, { wch: 18 }, { wch: 16 },
+        { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 18 }
       ];
       XLSX.utils.book_append_sheet(wb, wsSubs, "قاعدة_المشتركين");
 
