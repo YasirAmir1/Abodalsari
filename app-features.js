@@ -704,7 +704,7 @@
           '<span style="' + displayAmountStyle + '">' + displayAmount + '</span>' +
         '</td>' +
         '<td style="text-align: center;">' +
-          '<div class="cell-date-range" style="direction: ltr; font-size: 0.8rem;"><div class="cell-date-from">بدء: ' + escapeHtml(s.activationDate || s.startDate || s.joiningDate || '-') + '</div><div class="cell-date-to">انتهاء: ' + escapeHtml(s.expiryDate || s.endDate || s.dueDate || '-') + '</div></div>' +
+          (isActive ? ('<div class="cell-date-range" style="direction: ltr; font-size: 0.8rem;"><div class="cell-date-from">بدء: ' + escapeHtml(s.activationDate || s.startDate || s.joiningDate || '-') + '</div><div class="cell-date-to">انتهاء: ' + escapeHtml(s.expiryDate || s.endDate || s.dueDate || '-') + '</div></div>') : '<span style="color: var(--muted); font-size: 0.9rem; font-weight: 700;">-</span>') +
         '</td>' +
         '<td style="text-align: center;">' +
           (() => {
