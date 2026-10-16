@@ -549,6 +549,31 @@
     return '1 شهر';
   };
 
+      window.getSubscriberAmountAndDebt = function(s, debts, sales) {
+        let amount = 0;
+        if (s.price !== undefined && s.price !== null && Number(s.price) > 0) {
+          amount = Number(s.price);
+        }
+        const subDebt = debts.find(d => ((d.customerName && d.customerName.includes(s.name)) || (d.saleId && sales.find(sal => sal.id === d.saleId && sal.deviceNumber === s.deviceNumber))) && Number(d.remainingAmount) > 0);
+        const isDebt = s.paymentStatus === 'دين' || s.paymentStatus === 'غير مدفوع' || s.paymentMethod === 'دين' || (subDebt && Number(subDebt.remainingAmount) > 0);
+        
+        if (isDebt && subDebt && Number(subDebt.remainingAmount) > 0) {
+          amount = Number(subDebt.remainingAmount);
+        } else if (!amount) {
+          if (subDebt && Number(subDebt.totalAmount || subDebt.remainingAmount) > 0) {
+            amount = Number(subDebt.remainingAmount || subDebt.totalAmount);
+          } else {
+            const subSales = sales.filter(sal => sal.deviceNumber === s.deviceNumber || sal.customerName === s.name);
+            if (subSales.length > 0 && Number(subSales[0].price) > 0) {
+              amount = Number(subSales[0].price);
+            } else {
+              amount = 25000;
+            }
+          }
+        }
+        return { amount, isDebt };
+      }
+
   function renderSubscriberRows(subs, todayTime) {
     if (subs.length === 0) {
       return '<tr><td colspan="8" style="text-align: center; color: var(--muted); padding: 30px;">لا يوجد مشتركون مطابقون</td></tr>';
@@ -594,31 +619,6 @@
       const waLink = (s.phone && window.normalizeIraqiPhone) ? 'https://wa.me/' + window.normalizeIraqiPhone(s.phone) + '?text=' + encodeURIComponent(typeof window.formatWhatsAppMessage === 'function' ? window.formatWhatsAppMessage({ customerName: s.name, saleType: 'تجديد اشتراك', subscriptionType: 'اشتراك سنوي/شهري', price: 0, paymentStatus: 'تم التسديد', endDate: s.expiryDate, deviceNumber: s.deviceNumber }) : '') : '';
 
       // Helper function to calculate subscriber amount and debt status
-      window.getSubscriberAmountAndDebt = function(s, debts, sales) {
-        let amount = 0;
-        if (s.price !== undefined && s.price !== null && Number(s.price) > 0) {
-          amount = Number(s.price);
-        }
-        const subDebt = debts.find(d => ((d.customerName && d.customerName.includes(s.name)) || (d.saleId && sales.find(sal => sal.id === d.saleId && sal.deviceNumber === s.deviceNumber))) && Number(d.remainingAmount) > 0);
-        const isDebt = s.paymentStatus === 'دين' || s.paymentStatus === 'غير مدفوع' || s.paymentMethod === 'دين' || (subDebt && Number(subDebt.remainingAmount) > 0);
-        
-        if (isDebt && subDebt && Number(subDebt.remainingAmount) > 0) {
-          amount = Number(subDebt.remainingAmount);
-        } else if (!amount) {
-          if (subDebt && Number(subDebt.totalAmount || subDebt.remainingAmount) > 0) {
-            amount = Number(subDebt.remainingAmount || subDebt.totalAmount);
-          } else {
-            const subSales = sales.filter(sal => sal.deviceNumber === s.deviceNumber || sal.customerName === s.name);
-            if (subSales.length > 0 && Number(subSales[0].price) > 0) {
-              amount = Number(subSales[0].price);
-            } else {
-              amount = 25000;
-            }
-          }
-        }
-        return { amount, isDebt };
-      }
-
       // Use the helper
       const { amount, isDebt } = window.getSubscriberAmountAndDebt(s, debts, sales);
 
@@ -1049,11 +1049,13 @@
             <div class="filter-group-row">
               <span class="filter-group-label">الوكيل المسؤول:</span>
               <div class="filter-chips-wrap">
-                <span class="chip ${subFilter.owner === 'all' ? 'active' : ''}" onclick="setSubFilter('owner', 'all')">الكل</span>
-                <span class="chip ${subFilter.owner === 'المركز الرئيسي' ? 'active' : ''}" onclick="setSubFilter('owner', 'المركز الرئيسي')">المركز الرئيسي</span>
-                ${agents.map(a => `
-                  <span class="chip ${subFilter.owner === a.name ? 'active' : ''}" onclick="setSubFilter('owner', '${escapeHtml(a.name)}')">${escapeHtml(a.name)}</span>
-                `).join('')}
+                <span class="chip ${subFilter.owner === 'all' ? 'active' : ''}" onclick="setSubFilter('owner', 'all')">الكل (${countAll})</span>
+                <span class="chip ${subFilter.owner === 'المركز الرئيسي' ? 'active' : ''}" onclick="setSubFilter('owner', 'المركز الرئيسي')">المركز الرئيسي (${allSubsOriginal.filter(s => { const o = String(s.owner || '').trim(); return !o || o === 'المركز الرئيسي' || o === 'الرئيسية' || o === 'الادارة' || o === 'الإدارة' || o === 'main' || o === 'hq'; }).length})</span>
+                ${agents.map(a => {
+                  const agentSubCount = allSubsOriginal.filter(s => String(s.owner || '').trim() === a.name).length;
+                  return `
+                  <span class="chip ${subFilter.owner === a.name ? 'active' : ''}" onclick="setSubFilter('owner', '${escapeHtml(a.name)}')">${escapeHtml(a.name)} (${agentSubCount})</span>
+                `}).join('')}
               </div>
             </div>
 

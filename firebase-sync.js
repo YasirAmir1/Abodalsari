@@ -173,6 +173,13 @@ window.getSubscriberActiveStatus = function(s, today) {
       delete s.lastDeactivatedAt;
       return 'فعال';
     } else if (expISO && expISO < today) {
+      // Clear subscription details when expired
+      s.status = 'غير فعال';
+      s.activeStatus = 'غير فعال';
+      s.subscriptionType = '';
+      s.price = '';
+      s.expiryDate = '';
+      s.activationDate = '';
       return 'غير فعال';
     }
   }
