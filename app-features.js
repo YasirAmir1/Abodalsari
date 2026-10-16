@@ -1040,20 +1040,6 @@
               </div>
             </div>
 
-            <!-- Row 2: Status & Payment chips -->
-            <div class="filter-groups-split">
-              <div class="filter-group-block">
-                <span class="filter-group-label">حالة الاشتراك:</span>
-                <div class="filter-chips-wrap">
-                  <span class="chip ${subFilter.status === 'all' && subFilter.expiring !== '7days' ? 'active' : ''}" onclick="setSubFilter('status', 'all'); setSubFilter('expiring', 'all')">الكل (${countAll})</span>
-                  <span class="chip ${subFilter.status === 'فعال' ? 'active' : ''}" onclick="setSubFilter('status', 'فعال'); setSubFilter('expiring', 'all')">🟢 فعال (${countActive})</span>
-                  <span class="chip ${subFilter.status === 'غير فعال' ? 'active' : ''}" onclick="setSubFilter('status', 'غير فعال'); setSubFilter('expiring', 'all')">🔴 غير فعال (${countInactive})</span>
-                  <span class="chip ${subFilter.status === 'منتهي قريباً' || subFilter.expiring === '7days' ? 'active' : ''}" style="${subFilter.status === 'منتهي قريباً' || subFilter.expiring === '7days' ? 'background: #b45309; color: white;' : 'color: #b45309; border-color: rgba(234, 154, 42, 0.4);'}" onclick="setSubFilter('status', 'منتهي قريباً'); setSubFilter('expiring', '7days')">
-                    ⏳ منتهي قريباً [${countExpiring}]
-                  </span>
-                </div>
-              </div>
-
               <div class="filter-group-block">
                 <span class="filter-group-label">حالة الدفع:</span>
                 <div class="filter-chips-wrap">
@@ -1062,7 +1048,6 @@
                   <span class="chip ${subFilter.paymentStatus === 'دين' || subFilter.paymentStatus === 'غير مدفوع' ? 'active' : ''}" onclick="setSubFilter('paymentStatus', 'دين')">🔴 دين</span>
                 </div>
               </div>
-            </div>
 
             <!-- Row 3: Subscription Date Range & Search Box -->
             <div class="filter-bottom-bar">
