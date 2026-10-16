@@ -971,10 +971,6 @@
             <div class="stat-card-header"><span class="stat-title">الديون الحالية</span><div class="stat-icon">💰</div></div>
             <div class="stat-value-group"><span class="stat-value" style="color: var(--danger);">${formatNumber(totalDebt)}</span><span class="stat-unit">د.ع</span></div>
           </div>
-          <div class="stat-card">
-            <div class="stat-card-header"><span class="stat-title">إجمالي المسدد</span><div class="stat-icon">✅</div></div>
-            <div class="stat-value-group"><span class="stat-value" style="color: var(--success);">${formatNumber(totalPaid)}</span><span class="stat-unit">د.ع</span></div>
-          </div>
         </div>
 
         <!-- Automatic Alert Banner: Subscriptions expiring within 7 days -->
