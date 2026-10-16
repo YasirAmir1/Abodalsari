@@ -636,8 +636,8 @@
                           ownerClean === 'main' || 
                           ownerClean === 'hq';
 
-      // زر التجديد يظهر لجميع المشتركين لتفعيل وتجديد اشتراكاتهم مباشرة ورفع القيود
-      const showRenewalBtn = true;
+      // زر التجديد يظهر فقط لمشتركي المركز الرئيسي
+      const showRenewalBtn = isMainOwner;
       
       return '<tr style="' + rowHighlightStyle + '">' +
         '<td>' +

@@ -30,8 +30,8 @@ if (typeLabelIdx !== -1 && returnTrIdx !== -1) {
                           ownerClean === 'main' || 
                           ownerClean === 'hq';
 
-      // زر التجديد يظهر لجميع المشتركين لتفعيل وتجديد اشتراكاتهم مباشرة ورفع القيود
-      const showRenewalBtn = true;
+      // زر التجديد يظهر فقط لمشتركي المركز الرئيسي
+      const showRenewalBtn = isMainOwner;
       
       `;
   code = code.slice(0, typeLabelIdx) + newChunk + code.slice(returnTrIdx);
