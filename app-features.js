@@ -621,7 +621,10 @@
       const amountBg = isDebt ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)';
       const amountBorder = isDebt ? 'rgba(239, 68, 68, 0.28)' : 'rgba(16, 185, 129, 0.28)';
 
-      const typeLabel = window.getSubscriberTypeLabel ? window.getSubscriberTypeLabel(s, sales) : (s.subscriptionType || '1 شهر');
+      const isActive = (s.status === 'فعال');
+      const typeLabel = isActive ? (window.getSubscriberTypeLabel ? window.getSubscriberTypeLabel(s, sales) : (s.subscriptionType || '1 شهر')) : '-';
+      const displayAmount = isActive ? formatNumber(amount) + ' د.ع' : '-';
+      const displayAmountStyle = isActive ? ('font-weight: 800; font-size: 0.86rem; color: ' + amountColor + '; background: ' + amountBg + '; border: 1px solid ' + amountBorder + '; padding: 3px 9px; border-radius: 6px; display: inline-block; direction: ltr; font-family: monospace;') : 'color: var(--muted); font-size: 0.9rem; font-weight: 700;';
       
       // Determine if subscriber belongs to Main / Headquarters vs Agent
       const ownerClean = String(s.owner || '').trim();
@@ -651,16 +654,16 @@
         '<td><span class="badge badge-neutral">' + escapeHtml(window.resolveAgentName ? window.resolveAgentName(s) : s.owner) + '</span></td>' +
 
         '<td style="text-align: center; white-space: nowrap;">' +
-          (typeLabel ? '<span class="badge" style="font-weight: 700; font-size: 0.82rem; background: rgba(59, 130, 246, 0.1); color: #2563eb; border: 1px solid rgba(59, 130, 246, 0.25); padding: 3px 9px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">📅 ' + escapeHtml(typeLabel) + '</span>' : '<span style="color: var(--muted); font-size: 0.8rem;">-</span>') +
+          (typeLabel !== '-' ? '<span class="badge" style="font-weight: 700; font-size: 0.82rem; background: rgba(59, 130, 246, 0.1); color: #2563eb; border: 1px solid rgba(59, 130, 246, 0.25); padding: 3px 9px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;">📅 ' + escapeHtml(typeLabel) + '</span>' : '<span style="color: var(--muted); font-size: 0.9rem; font-weight: 700;">-</span>') +
         '</td>' +
         '<td style="text-align: center;">' +
           '<div class="cell-badges-group">' +
             (s.status === 'فعال' ? '<span class="badge badge-success" style="font-weight:700;">فعال</span>' : '<span class="badge badge-neutral" style="background: rgba(100, 116, 139, 0.12); color: #64748b; border: 1px solid rgba(100, 116, 139, 0.25);">غير فعال</span>') +
-            (s.paymentStatus ? ('<span class="badge ' + (s.paymentStatus === 'مدفوع' ? 'badge-success' : ((s.paymentStatus === 'دين' || s.paymentStatus === 'غير مدفوع') ? 'badge-danger' : 'badge-neutral')) + '">' + escapeHtml(s.paymentStatus === 'غير مدفوع' ? 'دين' : s.paymentStatus) + '</span>') : '') +
+            (isActive && s.paymentStatus ? ('<span class="badge ' + (s.paymentStatus === 'مدفوع' ? 'badge-success' : ((s.paymentStatus === 'دين' || s.paymentStatus === 'غير مدفوع') ? 'badge-danger' : 'badge-neutral')) + '">' + escapeHtml(s.paymentStatus === 'غير مدفوع' ? 'دين' : s.paymentStatus) + '</span>') : '') +
           '</div>' +
         '</td>' +
         '<td style="text-align: center; white-space: nowrap;">' +
-          '<span style="font-weight: 800; font-size: 0.86rem; color: ' + amountColor + '; background: ' + amountBg + '; border: 1px solid ' + amountBorder + '; padding: 3px 9px; border-radius: 6px; display: inline-block; direction: ltr; font-family: monospace;">' + formatNumber(amount) + ' د.ع</span>' +
+          '<span style="' + displayAmountStyle + '">' + displayAmount + '</span>' +
         '</td>' +
         '<td style="text-align: center;">' +
           '<div class="cell-date-range" style="direction: ltr; font-size: 0.8rem;"><div class="cell-date-from">بدء: ' + escapeHtml(s.activationDate || s.startDate || s.joiningDate || '-') + '</div><div class="cell-date-to">انتهاء: ' + escapeHtml(s.expiryDate || s.endDate || s.dueDate || '-') + '</div></div>' +
