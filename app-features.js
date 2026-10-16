@@ -593,35 +593,41 @@
       }
       const waLink = (s.phone && window.normalizeIraqiPhone) ? 'https://wa.me/' + window.normalizeIraqiPhone(s.phone) + '?text=' + encodeURIComponent(typeof window.formatWhatsAppMessage === 'function' ? window.formatWhatsAppMessage({ customerName: s.name, saleType: 'تجديد اشتراك', subscriptionType: 'اشتراك سنوي/شهري', price: 0, paymentStatus: 'تم التسديد', endDate: s.expiryDate, deviceNumber: s.deviceNumber }) : '') : '';
 
-      // Determine subscriber amount
-      let amount = 0;
-      if (s.price !== undefined && s.price !== null && Number(s.price) > 0) {
-        amount = Number(s.price);
-      }
-      const subDebt = debts.find(d => ((d.customerName && d.customerName.includes(s.name)) || (d.saleId && sales.find(sal => sal.id === d.saleId && sal.deviceNumber === s.deviceNumber))) && Number(d.remainingAmount) > 0);
-      const isDebt = s.paymentStatus === 'دين' || s.paymentStatus === 'غير مدفوع' || s.paymentMethod === 'دين' || (subDebt && Number(subDebt.remainingAmount) > 0);
-      
-      if (isDebt && subDebt && Number(subDebt.remainingAmount) > 0) {
-        amount = Number(subDebt.remainingAmount);
-      } else if (!amount) {
-        if (subDebt && Number(subDebt.totalAmount || subDebt.remainingAmount) > 0) {
-          amount = Number(subDebt.remainingAmount || subDebt.totalAmount);
-        } else {
-          const subSales = sales.filter(sal => sal.deviceNumber === s.deviceNumber || sal.customerName === s.name);
-          if (subSales.length > 0 && Number(subSales[0].price) > 0) {
-            amount = Number(subSales[0].price);
+      // Helper function to calculate subscriber amount and debt status
+      window.getSubscriberAmountAndDebt = function(s, debts, sales) {
+        let amount = 0;
+        if (s.price !== undefined && s.price !== null && Number(s.price) > 0) {
+          amount = Number(s.price);
+        }
+        const subDebt = debts.find(d => ((d.customerName && d.customerName.includes(s.name)) || (d.saleId && sales.find(sal => sal.id === d.saleId && sal.deviceNumber === s.deviceNumber))) && Number(d.remainingAmount) > 0);
+        const isDebt = s.paymentStatus === 'دين' || s.paymentStatus === 'غير مدفوع' || s.paymentMethod === 'دين' || (subDebt && Number(subDebt.remainingAmount) > 0);
+        
+        if (isDebt && subDebt && Number(subDebt.remainingAmount) > 0) {
+          amount = Number(subDebt.remainingAmount);
+        } else if (!amount) {
+          if (subDebt && Number(subDebt.totalAmount || subDebt.remainingAmount) > 0) {
+            amount = Number(subDebt.remainingAmount || subDebt.totalAmount);
           } else {
-            amount = 25000;
+            const subSales = sales.filter(sal => sal.deviceNumber === s.deviceNumber || sal.customerName === s.name);
+            if (subSales.length > 0 && Number(subSales[0].price) > 0) {
+              amount = Number(subSales[0].price);
+            } else {
+              amount = 25000;
+            }
           }
         }
+        return { amount, isDebt };
       }
+
+      // Use the helper
+      const { amount, isDebt } = window.getSubscriberAmountAndDebt(s, debts, sales);
 
       // Determine color: Red for debt, Green for cash
       const amountColor = isDebt ? '#dc2626' : '#16a34a';
       const amountBg = isDebt ? 'rgba(239, 68, 68, 0.12)' : 'rgba(16, 185, 129, 0.12)';
       const amountBorder = isDebt ? 'rgba(239, 68, 68, 0.28)' : 'rgba(16, 185, 129, 0.28)';
 
-      const isActive = (s.status === 'فعال');
+      const isActive = (String(s.status || '').trim() === 'فعال');
       const typeLabel = isActive ? (window.getSubscriberTypeLabel ? window.getSubscriberTypeLabel(s, sales) : (s.subscriptionType || '1 شهر')) : '-';
       const displayAmount = isActive ? formatNumber(amount) + ' د.ع' : '-';
       const displayAmountStyle = isActive ? ('font-weight: 800; font-size: 0.86rem; color: ' + amountColor + '; background: ' + amountBg + '; border: 1px solid ' + amountBorder + '; padding: 3px 9px; border-radius: 6px; display: inline-block; direction: ltr; font-family: monospace;') : 'color: var(--muted); font-size: 0.9rem; font-weight: 700;';
@@ -899,6 +905,18 @@
 
     const activeCount = subs.filter(s => s.status === 'فعال').length;
 
+    // Calculate totals for summary boxes
+    let totalDebt = 0;
+    let totalPaid = 0;
+    subs.forEach(s => {
+      const { amount, isDebt } = window.getSubscriberAmountAndDebt(s, debts, sales);
+      if (isDebt) {
+        totalDebt += amount;
+      } else {
+        totalPaid += amount;
+      }
+    });
+
     container.innerHTML = `
       <div class="page-view">
         <div class="page-header">
@@ -948,6 +966,14 @@
                 ${expiringSoonSubs.length > 0 ? '⚠️ تتطلب تذكيراً وتجديداً' : 'جميع الاشتراكات مستقرة'}
               </span>
             </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-header"><span class="stat-title">الديون الحالية</span><div class="stat-icon">💰</div></div>
+            <div class="stat-value-group"><span class="stat-value" style="color: var(--danger);">${formatNumber(totalDebt)}</span><span class="stat-unit">د.ع</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-header"><span class="stat-title">إجمالي المسدد</span><div class="stat-icon">✅</div></div>
+            <div class="stat-value-group"><span class="stat-value" style="color: var(--success);">${formatNumber(totalPaid)}</span><span class="stat-unit">د.ع</span></div>
           </div>
         </div>
 
