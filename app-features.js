@@ -1398,6 +1398,39 @@
       subscriber.hasDebt = false;
 
       data.subscribers = subs;
+
+      const subName = (subscriber.name || '').trim().toLowerCase();
+      const subDev = (subscriber.deviceNumber || '').trim();
+      const subDevDigits = subDev ? subDev.replace(/\D/g, '') : '';
+
+      if (Array.isArray(data.sales)) {
+        data.sales = data.sales.filter(s => {
+          const sDev = (s.deviceNumber || '').trim();
+          const sDevDigits = sDev ? sDev.replace(/\D/g, '') : '';
+          const sName = (s.customerName || s.name || '').trim().toLowerCase();
+          const matchDev = (subDev && subDev !== '-' && sDev === subDev) || (subDevDigits && sDevDigits && sDevDigits === sDevDigits);
+          const matchName = subName && sName && (sName === subName || sName.includes(subName) || subName.includes(sName));
+          return !(matchDev || matchName);
+        });
+        if (getEngine() && typeof getEngine().commitData === 'function') {
+          await getEngine().commitData('sales', data.sales);
+        }
+      }
+
+      if (Array.isArray(data.debts)) {
+        data.debts = data.debts.filter(d => {
+          const dDev = (d.deviceNumber || '').trim();
+          const dDevDigits = dDev ? dDev.replace(/\D/g, '') : '';
+          const dName = (d.customerName || '').trim().toLowerCase();
+          const matchDev = (subDev && subDev !== '-' && dDev === subDev) || (subDevDigits && dDevDigits && dDevDigits === dDevDigits);
+          const matchName = subName && dName && (dName === subName || dName.includes(subName) || dName.includes(subName));
+          return !(matchDev || matchName);
+        });
+        if (getEngine() && typeof getEngine().commitData === 'function') {
+          await getEngine().commitData('debts', data.debts);
+        }
+      }
+
       if (getEngine() && typeof getEngine().saveLocal === "function") {
         getEngine().saveLocal();
       }
