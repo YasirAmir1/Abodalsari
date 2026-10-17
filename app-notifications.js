@@ -737,7 +737,67 @@
 
     // 6. Real-time Firestore sync event listener & new notification audio chime + browser notification
     let lastSeenNotifIds = null;
+    let lastSeenSubmissionIds = null;
+    let lastSeenExpiringIds = null;
+
+    // Automatically request browser notification permission on load
+    window.requestBrowserNotificationPermission();
+
     window.addEventListener('sari:data-updated', function(e) {
+      const data = window.syncEngine?.data || (window.getData ? window.getData() : {});
+
+      // Check new agent submissions (orders)
+      const submissions = data.agentSubmissions || [];
+      const subIds = new Set(submissions.map(s => s.id));
+      if (lastSeenSubmissionIds !== null) {
+        let newSub = null;
+        for (const sub of submissions) {
+          if (!lastSeenSubmissionIds.has(sub.id)) {
+            newSub = sub;
+            break;
+          }
+        }
+        if (newSub) {
+          const user = window.syncEngine?.currentUser;
+          const role = (user && (user.role === 'admin' || user.role === 'أدمن' || user.role === 'مدير رئيسي')) ? 'admin' : 'agent';
+          if (typeof window.playNotificationChime === 'function') {
+            window.playNotificationChime(true, role);
+          }
+          window.showBrowserNotification('طلب جديد قيد الانتظار - شبكة الساري', {
+            body: `طلب ${newSub.saleType || 'تجديد/اشتراك'} للمشترك ${newSub.customerName || 'غير محدد'} (جهاز: ${newSub.deviceNumber || '00'}) بواسطة الوكيل ${newSub.seller || 'وكيل'}`,
+            tag: 'new-order-' + newSub.id
+          });
+        }
+      }
+      lastSeenSubmissionIds = subIds;
+
+      // Check expiring / expired subscriptions
+      const subscribers = data.subscribers || [];
+      const today = new Date().toISOString().substring(0, 10);
+      const expiringSubs = subscribers.filter(s => {
+        const exp = s.expiryDate || s.endDate || s.dueDate;
+        if (!exp || exp === '-') return false;
+        return exp <= today;
+      });
+      const expiringIds = new Set(expiringSubs.map(s => s.id || s.deviceNumber));
+      if (lastSeenExpiringIds !== null) {
+        let newlyExpired = null;
+        for (const sub of expiringSubs) {
+          const idKey = sub.id || sub.deviceNumber;
+          if (!lastSeenExpiringIds.has(idKey)) {
+            newlyExpired = sub;
+            break;
+          }
+        }
+        if (newlyExpired) {
+          window.showBrowserNotification('تنبيه: انتهاء اشتراك مشترك', {
+            body: `انتهى اشتراك المشترك ${newlyExpired.name || 'بدون اسم'} (جهاز: ${newlyExpired.deviceNumber || '00'})`,
+            tag: 'expired-' + (newlyExpired.id || newlyExpired.deviceNumber)
+          });
+        }
+      }
+      lastSeenExpiringIds = expiringIds;
+
       if (!e.detail || e.detail.collection === 'notifications' || e.detail.collection === 'all') {
         const notifs = window.getNotifications();
         const currentIds = new Set(notifs.map(n => n.id));

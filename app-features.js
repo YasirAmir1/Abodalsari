@@ -58,6 +58,7 @@
 
   // --- Page 4: Debts ---
   let debtFilterSeller = 'all';
+  let debtSearchQuery = '';
 
   window.renderDebts = function(container) {
     const data = getData();
@@ -66,6 +67,10 @@
 
     if (debtFilterSeller !== 'all') {
       debts = debts.filter(d => d.seller === debtFilterSeller);
+    }
+    if (debtSearchQuery) {
+      const q = debtSearchQuery.trim().toLowerCase();
+      debts = debts.filter(d => (d.customerName || '').toLowerCase().includes(q) || (d.deviceNumber || '').toLowerCase().includes(q));
     }
 
     // Total calculation for all debts / filtered debts
@@ -236,13 +241,16 @@
         </div>
 
         <div class="content-card">
-          <div class="filters-bar">
+          <div class="filters-bar" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: space-between; margin-bottom: 16px;">
             <div class="filter-chips">
               <span class="chip ${debtFilterSeller === 'all' ? 'active' : ''}" onclick="setDebtFilter('all')">كافة الجهات</span>
               <span class="chip ${debtFilterSeller === 'المركز الرئيسي' ? 'active' : ''}" onclick="setDebtFilter('المركز الرئيسي')">المركز الرئيسي</span>
               ${agents.map(a => `
                 <span class="chip ${debtFilterSeller === a.name ? 'active' : ''}" onclick="setDebtFilter('${escapeHtml(a.name)}')">${escapeHtml(a.name)}</span>
               `).join('')}
+            </div>
+            <div class="filter-search-box" style="flex: 1; min-width: 220px; max-width: 320px;">
+              <input type="text" class="form-control" id="debt-search-input" placeholder="🔍 بحث باسم المشترك أو رقم الجهاز..." value="${escapeHtml(debtSearchQuery)}" oninput="window.setDebtSearchQuery(this.value)" style="width: 100%; padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--line); font-size: 0.88rem;">
             </div>
           </div>
 
@@ -308,6 +316,23 @@
   window.setDebtFilter = function(seller) {
     debtFilterSeller = seller;
     window.renderDebts(document.getElementById('main-content'));
+  };
+
+  window.setDebtSearchQuery = function(q) {
+    debtSearchQuery = q;
+    const container = document.getElementById('main-content');
+    if (container) {
+      const input = document.getElementById('debt-search-input');
+      const cursor = input ? input.selectionStart : 0;
+      window.renderDebts(container);
+      const newInput = document.getElementById('debt-search-input');
+      if (newInput) {
+        newInput.focus();
+        try {
+          newInput.setSelectionRange(cursor, cursor);
+        } catch (e) {}
+      }
+    }
   };
 
   window.openDebtPaymentModal = function(debtId) {
