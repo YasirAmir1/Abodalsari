@@ -496,28 +496,46 @@
   };
 
   window.deleteDebt = function(id) {
-    window.showConfirmModal('حذف سجل الديون', 'هل أنت متأكد من حذف هذا السجل والدين المتبقي؟', async () => {
-      const data = getData();
-      const debtToDelete = (data.debts || []).find(d => d.id === id);
+    window.showConfirmModal('حذف سجل الديون', 'هل أنت متأكد من حذف هذا السجل والدين نهائياً من النظام؟', async () => {
+      const engine = getEngine();
+      const data = engine.data || getData();
+      
+      // 1. Find the debt to delete
+      const debtIndex = (data.debts || []).findIndex(d => d.id === id);
+      if (debtIndex === -1) {
+        window.showToast('لم يتم العثور على الدين', 'error');
+        return;
+      }
+      const debtToDelete = data.debts[debtIndex];
 
-      let updatedSales = data.sales || [];
-      if (debtToDelete) {
-        updatedSales = updatedSales.map(s => {
-          if (s.id === debtToDelete.saleId || s.code === debtToDelete.saleCode) {
-            return { ...s, agentPaid: 0, paymentStatus: 'معلق' };
-          }
-          return s;
-        });
+      // 2. Remove debt from local data
+      data.debts.splice(debtIndex, 1);
+
+      // 3. Update the linked sale
+      if (data.sales) {
+        const saleIndex = data.sales.findIndex(s => s.id === debtToDelete.saleId || s.code === debtToDelete.saleCode);
+        if (saleIndex !== -1) {
+          // Reset sale to initial/unpaid state (adjust based on your system logic for reset)
+          data.sales[saleIndex] = { 
+            ...data.sales[saleIndex], 
+            paymentStatus: 'غير مدفوع',
+            agentPaid: 0,
+            remainingAmount: data.sales[saleIndex].price
+          };
+        }
       }
 
-      await getEngine().commitData('sales', updatedSales);
-      await getEngine().deleteItem('debts', id);
-      window.showToast('تم حذف السجل بنجاح', 'success');
+      // 4. Persist all changes
+      await engine.commitData('debts', data.debts);
+      await engine.commitData('sales', data.sales);
+      
+      window.showToast('تم حذف الدين وتحديث بيانات الفاتورة بنجاح', 'success');
+      
       const mainEl = document.getElementById('main-content');
       if (mainEl && typeof window.renderDebts === 'function') {
         window.renderDebts(mainEl);
       }
-    }, 'حذف السجل', 'إلغاء', true);
+    }, 'حذف نهائي', 'إلغاء', true);
   };
 
   window.exportDebtsExcel = function() {
