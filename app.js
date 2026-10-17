@@ -2481,76 +2481,74 @@
     container.style.position = 'fixed';
     container.style.left = '-9999px';
     container.style.top = '0';
-    container.style.width = '480px';
-    container.style.background = '#ffffff';
-    container.style.padding = '24px';
-    container.style.fontFamily = "'Cairo', 'Tajawal', system-ui, sans-serif";
+    container.style.width = '550px';
+    container.style.background = '#f4f4f4';
+    container.style.padding = '20px';
+    container.style.fontFamily = "'Cairo', sans-serif";
     container.style.direction = 'rtl';
-    container.style.color = '#0f172a';
-    container.style.borderRadius = '14px';
-    container.style.border = '2px solid #0284c7';
-    container.style.boxShadow = '0 10px 25px rgba(0,0,0,0.15)';
+    container.style.color = '#000';
 
     container.innerHTML = `
-      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0284c7; padding-bottom: 12px; margin-bottom: 14px;">
-        <div>
-          <h2 style="margin: 0; font-size: 1.25rem; font-weight: 800; color: #0284c7; display: flex; align-items: center; gap: 6px;">
-            <span>🛰️</span> <span>مركز الساري للبث الأرضي</span>
-          </h2>
-          <div style="font-size: 0.78rem; color: #64748b; margin-top: 2px; font-weight: 600;">فاتورة رسمية وسند قبض معتمد</div>
+      <div style="background: #fff; border-top: 8px solid #005f56; padding: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #eee; padding-bottom: 10px;">
+          <h2 style="margin: 0; font-size: 1.4rem;">مركز الساري - Al-Sari</h2>
+          <h3 style="margin: 0; font-size: 1.2rem; color: #333;">فاتورة بيع واشتراك مركز الساري</h3>
         </div>
-        <div style="text-align: left;">
-          <span style="display: inline-block; background: #e0f2fe; color: #0369a1; padding: 4px 10px; border-radius: 6px; font-size: 0.78rem; font-weight: 800; border: 1px solid #bae6fd;">
-            ${escapeHtml(saleType)}
-          </span>
-        </div>
-      </div>
+        <div style="font-weight: bold; margin: 10px 0;">${invoiceCode}</div>
+        
+        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+          <tr style="background: #002d5c; color: white;">
+            <td style="padding: 10px; width: 40%; font-weight: bold;">اسم المشترك:</td>
+            <td style="padding: 10px; background: #b2dfdb; color: #000;">${escapeHtml(customerName)}</td>
+          </tr>
+          <tr style="background: #002d5c; color: white;">
+            <td style="padding: 10px; font-weight: bold;">رقم الهاتف:</td>
+            <td style="padding: 10px; background: #b2dfdb; color: #000;">${escapeHtml(customerPhone)}</td>
+          </tr>
+          <tr style="background: #002d5c; color: white;">
+            <td style="padding: 10px; font-weight: bold;">نوع البيع:</td>
+            <td style="padding: 10px; background: #b2dfdb; color: #000;">${escapeHtml(saleType)}</td>
+          </tr>
+          <tr style="background: #002d5c; color: white;">
+            <td style="padding: 10px; font-weight: bold;">كود الجهاز:</td>
+            <td style="padding: 10px; background: #b2dfdb; color: #000;">${escapeHtml(deviceNumber)}</td>
+          </tr>
+          <tr style="background: #002d5c; color: white;">
+            <td style="padding: 10px; font-weight: bold;">فترة الاشتراك:</td>
+            <td style="padding: 10px; background: #b2dfdb; color: #000;">${escapeHtml(subscriptionType)}</td>
+          </tr>
+          <tr style="background: #002d5c; color: white;">
+            <td style="padding: 10px; font-weight: bold;">تاريخ البدء:</td>
+            <td style="padding: 10px; background: #b2dfdb; color: #000;">${escapeHtml(startDate)}</td>
+          </tr>
+          <tr style="background: #002d5c; color: white;">
+            <td style="padding: 10px; font-weight: bold;">تاريخ الانتهاء:</td>
+            <td style="padding: 10px; background: #b2dfdb; color: #000;">${escapeHtml(endDate)}</td>
+          </tr>
+          <tr style="background: #002d5c; color: white;">
+            <td style="padding: 10px; font-weight: bold;">المبلغ الإجمالي:</td>
+            <td style="padding: 10px; background: #b2dfdb; color: #000;">${price} د.ع</td>
+          </tr>
+          <tr style="background: #002d5c; color: white;">
+            <td style="padding: 10px; font-weight: bold;">طريقة الدفع:</td>
+            <td style="padding: 10px; background: #b2dfdb; color: #000;">${escapeHtml(paymentStatus)}</td>
+          </tr>
+        </table>
 
-      <div style="background: #f8fafc; border: 1.5px dashed #cbd5e1; border-radius: 10px; padding: 12px; text-align: center; margin-bottom: 14px;">
-        <div style="font-size: 0.76rem; color: #64748b; font-weight: 700; margin-bottom: 4px;">رقم كود الجهاز المعتمد (16 رقماً):</div>
-        <div style="font-family: 'Courier New', Courier, monospace; font-size: 1.22rem; font-weight: 900; letter-spacing: 2px; color: #0f172a; margin-bottom: 10px; direction: ltr;">
-          ${escapeHtml(deviceNumber)}
+        <div style="display: flex; margin-top: 20px; align-items: center;">
+          <div style="flex: 1; background: #002d5c; color: white; padding: 20px; text-align: center;">
+            <div style="font-size: 1.2rem;">الاجمالي</div>
+            <div style="font-size: 1.5rem; font-weight: bold; margin-top: 10px;">المبلغ الإجمالي: [${price} د.ع]</div>
+          </div>
+          <div style="padding: 10px;">
+            <div id="download-qr-box" style="width: 120px; height: 120px; background: #fff; border: 1px solid #ccc;"></div>
+            <div style="text-align: center; font-size: 0.8rem; margin-top: 5px;">كود الجهاز: ${escapeHtml(deviceNumber)}</div>
+          </div>
         </div>
-        <div style="display: flex; justify-content: center; align-items: center;">
-          <div id="download-qr-box" style="padding: 10px; background: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; display: inline-flex;"></div>
-        </div>
-      </div>
 
-      <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 0.88rem; line-height: 1.8;">
-        <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #f1f5f9; padding-bottom: 4px;">
-          <span style="color: #64748b; font-weight: 600;">📄 رقم الفاتورة:</span>
-          <strong style="color: #0f172a; font-family: monospace;">${escapeHtml(invoiceCode)}</strong>
+        <div style="text-align: center; margin-top: 20px; font-size: 0.9rem; color: #666;">
+          شكراً لتعاملكم مع مركز الساري للبث الأرضي
         </div>
-        <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #f1f5f9; padding: 4px 0;">
-          <span style="color: #64748b; font-weight: 600;">👤 اسم المشترك:</span>
-          <strong style="color: #0f172a;">${escapeHtml(customerName)}</strong>
-        </div>
-        ${customerPhone ? `
-        <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #f1f5f9; padding: 4px 0;">
-          <span style="color: #64748b; font-weight: 600;">📞 رقم الهاتف:</span>
-          <span style="font-family: monospace; font-weight: 700; direction: ltr;">${escapeHtml(customerPhone)}</span>
-        </div>` : ""}
-        <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #f1f5f9; padding: 4px 0;">
-          <span style="color: #64748b; font-weight: 600;">📅 مدة الاشتراك:</span>
-          <strong style="color: #0284c7;">${escapeHtml(subscriptionType)}</strong>
-        </div>
-        <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #f1f5f9; padding: 4px 0;">
-          <span style="color: #64748b; font-weight: 600;">🗓️ تاريخ البدء:</span>
-          <span style="font-family: monospace; font-weight: 600;">${escapeHtml(startDate)}</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #f1f5f9; padding: 4px 0;">
-          <span style="color: #64748b; font-weight: 600;">⌛ تاريخ الانتهاء:</span>
-          <span style="font-family: monospace; font-weight: 700; color: #dc2626;">${escapeHtml(endDate)}</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; padding-top: 4px;">
-          <span style="color: #64748b; font-weight: 600;">💰 المبلغ الإجمالي:</span>
-          <strong style="color: #16a34a; font-size: 0.95rem;">${price} د.ع (${escapeHtml(paymentStatus)})</strong>
-        </div>
-      </div>
-
-      <div style="text-align: center; border-top: 1px solid #e2e8f0; padding-top: 10px; font-size: 0.74rem; color: #64748b; line-height: 1.4;">
-        <div>🌟 شكراً لاختياركم مركز الساري للبث الأرضي - نتمنى لكم مشاهدة ممتعة 🌟</div>
-        <div style="font-weight: 700; color: #0284c7; margin-top: 2px;">خدمة المشتركين والدعم الفني المباشر</div>
       </div>
     `;
 
@@ -2561,8 +2559,8 @@
       if (qrTarget) {
         new QRCode(qrTarget, {
           text: deviceNumber,
-          width: 130,
-          height: 130,
+          width: 120,
+          height: 120,
           colorDark: "#000000",
           colorLight: "#ffffff",
           correctLevel: QRCode.CorrectLevel.M
@@ -2630,61 +2628,61 @@
     cardEl.style.boxShadow = "0 10px 25px rgba(0,0,0,0.15)";
 
     cardEl.innerHTML = `
-      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #0284c7; padding-bottom: 12px; margin-bottom: 14px;">
-        <div>
-          <h2 style="margin: 0; font-size: 1.25rem; font-weight: 800; color: #0284c7; display: flex; align-items: center; gap: 6px;">
-            <span>🛰️</span> <span>مركز الساري للبث الأرضي</span>
-          </h2>
-          <div style="font-size: 0.78rem; color: #64748b; margin-top: 2px; font-weight: 600;">بطاقة اشتراك وتفعيل جهاز معتمد</div>
+      <div style="background: #fff; border-top: 8px solid #005f56; padding: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #eee; padding-bottom: 10px;">
+          <h2 style="margin: 0; font-size: 1.4rem;">مركز الساري - Al-Sari</h2>
+          <h3 style="margin: 0; font-size: 1.2rem; color: #333;">بطاقة اشتراك وتفعيل جهاز</h3>
         </div>
-        <div style="text-align: left;">
-          <span style="display: inline-block; background: #e0f2fe; color: #0369a1; padding: 4px 10px; border-radius: 6px; font-size: 0.78rem; font-weight: 800; border: 1px solid #bae6fd;">
-            ${escapeHtml(saleType)}
-          </span>
-        </div>
-      </div>
+        
+        <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+          <tr style="background: #002d5c; color: white;">
+            <td style="padding: 10px; width: 40%; font-weight: bold;">اسم المشترك:</td>
+            <td style="padding: 10px; background: #b2dfdb; color: #000;">${escapeHtml(customerName)}</td>
+          </tr>
+          <tr style="background: #002d5c; color: white;">
+            <td style="padding: 10px; font-weight: bold;">رقم الهاتف:</td>
+            <td style="padding: 10px; background: #b2dfdb; color: #000;">${escapeHtml(customerPhone)}</td>
+          </tr>
+          <tr style="background: #002d5c; color: white;">
+            <td style="padding: 10px; font-weight: bold;">نوع البيع:</td>
+            <td style="padding: 10px; background: #b2dfdb; color: #000;">${escapeHtml(saleType)}</td>
+          </tr>
+          <tr style="background: #002d5c; color: white;">
+            <td style="padding: 10px; font-weight: bold;">كود الجهاز:</td>
+            <td style="padding: 10px; background: #b2dfdb; color: #000;">${escapeHtml(deviceNumber)}</td>
+          </tr>
+          <tr style="background: #002d5c; color: white;">
+            <td style="padding: 10px; font-weight: bold;">فترة الاشتراك:</td>
+            <td style="padding: 10px; background: #b2dfdb; color: #000;">${escapeHtml(subscriptionType)}</td>
+          </tr>
+          <tr style="background: #002d5c; color: white;">
+            <td style="padding: 10px; font-weight: bold;">تاريخ البدء:</td>
+            <td style="padding: 10px; background: #b2dfdb; color: #000;">${escapeHtml(startDate)}</td>
+          </tr>
+          <tr style="background: #002d5c; color: white;">
+            <td style="padding: 10px; font-weight: bold;">تاريخ الانتهاء:</td>
+            <td style="padding: 10px; background: #b2dfdb; color: #000;">${escapeHtml(endDate)}</td>
+          </tr>
+          <tr style="background: #002d5c; color: white;">
+            <td style="padding: 10px; font-weight: bold;">المبلغ الإجمالي:</td>
+            <td style="padding: 10px; background: #b2dfdb; color: #000;">${price} د.ع</td>
+          </tr>
+          <tr style="background: #002d5c; color: white;">
+            <td style="padding: 10px; font-weight: bold;">حالة الدفع:</td>
+            <td style="padding: 10px; background: #b2dfdb; color: #000;">${escapeHtml(paymentStatus)}</td>
+          </tr>
+        </table>
 
-      <div style="background: #f8fafc; border: 1.5px dashed #cbd5e1; border-radius: 10px; padding: 12px; text-align: center; margin-bottom: 14px;">
-        <div style="font-size: 0.76rem; color: #64748b; font-weight: 700; margin-bottom: 4px;">رقم كود الجهاز المعتمد (16 رقماً):</div>
-        <div style="font-family: 'Courier New', Courier, monospace; font-size: 1.22rem; font-weight: 900; letter-spacing: 2px; color: #0f172a; margin-bottom: 10px; direction: ltr;">
-          ${escapeHtml(deviceNumber)}
+        <div style="display: flex; margin-top: 20px; align-items: center; justify-content: center;">
+          <div style="padding: 10px;">
+            <div id="wa-share-card-qr" style="width: 120px; height: 120px; background: #fff; border: 1px solid #ccc;"></div>
+            <div style="text-align: center; font-size: 0.8rem; margin-top: 5px;">كود الجهاز: ${escapeHtml(deviceNumber)}</div>
+          </div>
         </div>
-        <div style="display: flex; justify-content: center; align-items: center;">
-          <div id="wa-share-card-qr" style="padding: 10px; background: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; display: inline-flex;"></div>
-        </div>
-      </div>
 
-      <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 0.88rem; line-height: 1.8;">
-        <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #f1f5f9; padding-bottom: 4px;">
-          <span style="color: #64748b; font-weight: 600;">👤 اسم المشترك:</span>
-          <strong style="color: #0f172a;">${escapeHtml(customerName)}</strong>
+        <div style="text-align: center; margin-top: 20px; font-size: 0.9rem; color: #666;">
+          شكراً لتعاملكم مع مركز الساري للبث الأرضي
         </div>
-        ${customerPhone ? `
-        <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #f1f5f9; padding: 4px 0;">
-          <span style="color: #64748b; font-weight: 600;">📞 رقم الهاتف:</span>
-          <span style="font-family: monospace; font-weight: 700; direction: ltr;">${escapeHtml(customerPhone)}</span>
-        </div>` : ""}
-        <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #f1f5f9; padding: 4px 0;">
-          <span style="color: #64748b; font-weight: 600;">📅 مدة الاشتراك:</span>
-          <strong style="color: #0284c7;">${escapeHtml(subscriptionType)}</strong>
-        </div>
-        <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #f1f5f9; padding: 4px 0;">
-          <span style="color: #64748b; font-weight: 600;">🗓️ تاريخ البدء:</span>
-          <span style="font-family: monospace; font-weight: 600;">${escapeHtml(startDate)}</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #f1f5f9; padding: 4px 0;">
-          <span style="color: #64748b; font-weight: 600;">⌛ تاريخ الانتهاء:</span>
-          <span style="font-family: monospace; font-weight: 700; color: #dc2626;">${escapeHtml(endDate)}</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; padding-top: 4px;">
-          <span style="color: #64748b; font-weight: 600;">💰 المبلغ الإجمالي:</span>
-          <strong style="color: #16a34a; font-size: 0.95rem;">${price} د.ع (${escapeHtml(paymentStatus)})</strong>
-        </div>
-      </div>
-
-      <div style="text-align: center; border-top: 1px solid #e2e8f0; padding-top: 10px; font-size: 0.74rem; color: #64748b; line-height: 1.4;">
-        <div>🌟 شكراً لاختياركم مركز الساري للبث الأرضي - نتمنى لكم مشاهدة ممتعة 🌟</div>
-        <div style="font-weight: 700; color: #0284c7; margin-top: 2px;">خدمة المشتركين والدعم الفني المباشر</div>
       </div>
     `;
 
