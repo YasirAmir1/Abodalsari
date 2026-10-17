@@ -681,7 +681,7 @@
       // زر التجديد يظهر فقط للمشتركين غير الفعالين
       const showRenewalBtn = isMainOwner && s.status !== 'فعال';
       
-      return '<tr style="' + rowHighlightStyle + '">' +
+      return '<tr style="' + rowHighlightStyle + '" onclick="this.classList.toggle(\'expanded-mobile-card\')">' +
         '<td>' +
           '<div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap;">' +
             '<strong class="cell-title">' + escapeHtml(s.name) + '</strong>' +
@@ -1393,8 +1393,7 @@
         if (getEngine().db && window.isFirebaseConfigured && window.isFirebaseConfigured() && !window.firestoreQuotaExceeded) {
           const docId = subscriber.docId || subscriber.id;
           if (docId) {
-              getEngine().db.collection("subscribers").doc(docId).set(subscriber, { merge: true }).catch(() => {});
-            } catch (e) {}
+            getEngine().db.collection("subscribers").doc(docId).set(subscriber, { merge: true }).catch(() => {});
           }
         }
       }
