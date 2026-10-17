@@ -1600,8 +1600,7 @@
                 <div class="form-group" style="margin: 0;">
                   <label style="font-size: 0.8rem; font-weight: 700; margin-bottom: 3px;">المالك / الوكيل *</label>
                   <select id="asr-owner" onchange="updateAdminSubscriberRenewalPrice()" style="padding: 6px 10px; font-size: 0.88rem;">
-                    <option value="المركز الرئيسي" ${sub.owner === 'المركز الرئيسي' || !sub.owner ? 'selected' : ''}>المركز الرئيسي</option>
-                    ${agents.map(a => `<option value="${escapeHtml(a.name)}" ${sub.owner === a.name ? 'selected' : ''}>${escapeHtml(a.name)}</option>`).join('')}
+                    <option value="المركز الرئيسي" selected>المركز الرئيسي</option>
                   </select>
                 </div>
               </div>
@@ -2032,8 +2031,7 @@
                 <div class="form-group">
                   <label>المالك / الوكيل *</label>
                   <select id="sub-owner" onchange="updateSubModalDates(); updateSubModalPrice();">
-                    <option value="المركز الرئيسي" ${!existing || existing.owner === 'المركز الرئيسي' ? 'selected' : ''}>المركز الرئيسي</option>
-                    ${agents.map(a => `<option value="${escapeHtml(a.name)}" ${existing?.owner === a.name ? 'selected' : ''}>${escapeHtml(a.name)}</option>`).join('')}
+                    <option value="المركز الرئيسي" selected>المركز الرئيسي</option>
                   </select>
                 </div>
               </div>
