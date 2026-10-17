@@ -2363,9 +2363,9 @@
           </div>
           <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button type="button" class="btn btn-secondary" onclick="window.downloadSaleInvoiceImage('${sale.id}')">📥 تحميل صورة الفاتورة</button>
+              <button type="button" class="btn btn-secondary" onclick="window.downloadSaleInvoiceImage('${sale.id}')">📥 تحميل</button>
               <button type="button" class="btn btn-success" onclick="window.shareSaleWhatsAppCard('${sale.id}')" style="background: #25D366; color: white; border: none; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px; cursor: pointer;">
-                <span>💬</span> <span>مشاركة واتساب (البطاقة والصورة)</span>
+                <span>💬</span> <span>واتساب</span>
               </button>
             </div>
             <button type="button" class="btn btn-primary" onclick="window.closeModal(); navigateTo(currentPage);">تم</button>
