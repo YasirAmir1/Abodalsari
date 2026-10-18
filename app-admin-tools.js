@@ -2106,8 +2106,6 @@
           </div>
         </div>
 
-        <!-- No Firestore Quota Management -->
-
         <div class="content-card" style="margin-bottom: 24px;">
           <div class="card-header-bar">
             <h3>🛡️ جدول الأدمن والمدراء</h3>

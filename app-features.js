@@ -525,8 +525,12 @@
         }
       }
 
-      // 4. Persist all changes
-      await engine.commitData('debts', data.debts);
+      // 4. Persist all changes across system and Firestore
+      if (typeof engine.deleteItem === 'function') {
+        await engine.deleteItem('debts', id);
+      } else {
+        await engine.commitData('debts', data.debts);
+      }
       await engine.commitData('sales', data.sales);
       
       window.showToast('تم حذف الدين وتحديث بيانات الفاتورة بنجاح', 'success');
@@ -655,7 +659,7 @@
 
   function renderSubscriberRows(subs, todayTime) {
     if (subs.length === 0) {
-      return '<tr><td colspan="8" style="text-align: center; color: var(--muted); padding: 30px;">لا يوجد مشتركون مطابقون</td></tr>';
+      return '<tr><td colspan="9" style="text-align: center; color: var(--muted); padding: 30px;">لا يوجد مشتركون مطابقون</td></tr>';
     }
     const data = getData();
     const allSubs = data.subscribers || [];
@@ -698,7 +702,6 @@
       const waLink = (s.phone && window.normalizeIraqiPhone) ? 'https://wa.me/' + window.normalizeIraqiPhone(s.phone) + '?text=' + encodeURIComponent(typeof window.formatWhatsAppMessage === 'function' ? window.formatWhatsAppMessage({ customerName: s.name, saleType: 'تجديد اشتراك', subscriptionType: 'اشتراك سنوي/شهري', price: 0, paymentStatus: 'تم التسديد', endDate: s.expiryDate, deviceNumber: s.deviceNumber }) : '') : '';
 
       // Helper function to calculate subscriber amount and debt status
-      // Use the helper
       const { amount, isDebt } = window.getSubscriberAmountAndDebt(s, debts, sales);
 
       // Determine color: Red for debt, Green for cash
@@ -723,12 +726,19 @@
 
       // زر التجديد يظهر فقط للمشتركين غير الفعالين
       const showRenewalBtn = isMainOwner && s.status !== 'فعال';
+
+      const safeSubIdStr = String(s.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      const safeSubIdAttr = escapeHtml(String(s.id || ''));
+      const isSelected = window.selectedSubscriberIds && window.selectedSubscriberIds.has(String(s.id));
       
       return '<tr style="' + rowHighlightStyle + '" onclick="this.classList.toggle(\'expanded-mobile-card\')">' +
+        '<td style="text-align: center; width: 40px;" onclick="event.stopPropagation()">' +
+          '<input type="checkbox" class="subscriber-row-checkbox" value="' + safeSubIdAttr + '" ' + (isSelected ? 'checked' : '') + ' onchange="toggleSubscriberSelection(\'' + safeSubIdStr + '\', this)">' +
+        '</td>' +
         '<td>' +
           '<div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap;">' +
             '<strong class="cell-title">' + escapeHtml(s.name) + '</strong>' +
-            (showRenewalBtn ? ('<button class="btn btn-sm btn-success" onclick="openAdminSubscriberRenewalModal(\'' + String(s.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'") + '\')" title="تجديد وتفعيل الاشتراك وتعديل البيانات" style="padding: 1px 6px; font-size: 0.72rem; border-radius: 4px; background: var(--success, #10b981); color: #fff; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;">🔄 تجديد</button>') : '') +
+            (showRenewalBtn ? ('<button class="btn btn-sm btn-success" onclick="openAdminSubscriberRenewalModal(\'' + safeSubIdStr + '\')" title="تجديد وتفعيل الاشتراك وتعديل البيانات" style="padding: 1px 6px; font-size: 0.72rem; border-radius: 4px; background: var(--success, #10b981); color: #fff; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;">🔄 تجديد</button>') : '') +
           '</div>' +
           '<div class="cell-subtitle" style="direction: ltr; text-align: right;">' + escapeHtml(s.phone || '-') + '</div>' +
         '</td>' +
@@ -754,16 +764,12 @@
           (isActive ? ('<div class="cell-date-range" style="direction: ltr; font-size: 0.8rem;"><div class="cell-date-from">بدء: ' + escapeHtml(s.activationDate || s.startDate || s.joiningDate || '-') + '</div><div class="cell-date-to">انتهاء: ' + escapeHtml(s.expiryDate || s.endDate || s.dueDate || '-') + '</div></div>') : '<span style="color: var(--muted); font-size: 0.9rem; font-weight: 700;">-</span>') +
         '</td>' +
         '<td style="text-align: center;">' +
-          (() => {
-            const safeSubIdStr = String(s.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-            const safeSubIdAttr = escapeHtml(String(s.id || ''));
-            return '<div class="action-btns" style="justify-content: center; gap: 4px; display: inline-flex; align-items: center;">' +
-              (waLink ? '<a href="' + waLink + '" target="_blank" class="icon-btn btn-whatsapp" title="مراسلة عبر واتساب">💬</a>' : '') +
-              '<button type="button" class="icon-btn" onclick="openSubscriberModal(\'' + safeSubIdStr + '\')" title="تعديل بيانات المشترك">✏️</button>' +
-              '<button type="button" class="icon-btn btn-deactivate" data-sub-id="' + safeSubIdAttr + '" onclick="window.confirmDeactivateSubscriber(\'' + safeSubIdStr + '\')" title="إلغاء تفعيل اشتراك المشترك وتفريغ التواريخ والبيانات" aria-label="إلغاء تفعيل اشتراك المشترك" style="color: #ef4444; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 3px 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;"><span style="font-size: 0.92rem; font-weight: 900; line-height: 1; pointer-events: none;">❌</span></button>' +
-              '<button type="button" class="icon-btn btn-del" onclick="deleteSubscriber(\'' + safeSubIdStr + '\')" title="حذف المشترك نهائياً">🗑️</button>' +
-            '</div>';
-          })() +
+          '<div class="action-btns" style="justify-content: center; gap: 4px; display: inline-flex; align-items: center;">' +
+            (waLink ? '<a href="' + waLink + '" target="_blank" class="icon-btn btn-whatsapp" title="مراسلة عبر واتساب">💬</a>' : '') +
+            '<button type="button" class="icon-btn" onclick="openSubscriberModal(\'' + safeSubIdStr + '\')" title="تعديل بيانات المشترك">✏️</button>' +
+            '<button type="button" class="icon-btn btn-deactivate" data-sub-id="' + safeSubIdAttr + '" onclick="window.confirmDeactivateSubscriber(\'' + safeSubIdStr + '\')" title="إلغاء تفعيل اشتراك المشترك وتفريغ التواريخ والبيانات" aria-label="إلغاء تفعيل اشتراك المشترك" style="color: #ef4444; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; padding: 3px 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;"><span style="font-size: 0.92rem; font-weight: 900; line-height: 1; pointer-events: none;">❌</span></button>' +
+            '<button type="button" class="icon-btn btn-del" onclick="deleteSubscriber(\'' + safeSubIdStr + '\')" title="حذف المشترك نهائياً">🗑️</button>' +
+          '</div>' +
         '</td>' +
       '</tr>';
     }).join('');
@@ -1201,6 +1207,7 @@
           <table class="data-table subscribers-table">
               <thead>
                 <tr>
+                  <th style="width: 40px; text-align: center;"><input type="checkbox" id="select-all-subscribers-checkbox" onclick="toggleSelectAllSubscribers(this)" title="تحديد الكل"></th>
                   <th>المشترك / الهاتف</th>
                   <th>رقم الجهاز</th>
                   <th>الوكيل المسؤول</th>
@@ -1220,12 +1227,15 @@
 
         <!-- الفقرة الأخيرة في أسفل صفحة المشتركون وأجهزة البث -->
         <div class="page-bottom-actions" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; padding-top: 14px; margin-top: 6px; gap: 10px;">
-          <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
             <button class="btn btn-secondary" onclick="openExcelImportSubscribersModal()">
               <span>📥</span> <span>استدعاء المشتركين من Excel</span>
             </button>
             <button class="btn btn-secondary" onclick="exportSubscribersExcel()">
               <span>📤</span> <span>تصدير Excel</span>
+            </button>
+            <button class="btn btn-danger btn-sm" id="delete-selected-subscribers-btn" onclick="deleteSelectedSubscribers()" style="display: ${window.selectedSubscriberIds && window.selectedSubscriberIds.size > 0 ? 'inline-flex' : 'none'}; align-items: center; gap: 6px; font-weight: 700;">
+              <span>🗑️</span> <span>حذف المحدد (<span id="selected-subscribers-count">${window.selectedSubscriberIds ? window.selectedSubscriberIds.size : 0}</span>)</span>
             </button>
           </div>
           <button class="btn btn-outline-danger btn-icon" onclick="confirmDeleteAllSubscribers()" title="حذف الكل والتعاملات" aria-label="حذف الكل والتعاملات">
@@ -1461,18 +1471,6 @@
       if (typeof window.renderSubscribers === "function") {
         window.renderSubscribers(document.getElementById("main-content"));
       }
-
-      if (getEngine()) {
-        if (typeof getEngine().commitData === "function") {
-          getEngine().commitData("subscribers", subs).catch(err => console.warn("Sync warning on deactivating subscriber:", err));
-        }
-        if (getEngine().db && window.isFirebaseConfigured && window.isFirebaseConfigured() && !window.firestoreQuotaExceeded) {
-          const docId = subscriber.docId || subscriber.id;
-          if (docId) {
-            getEngine().db.collection("subscribers").doc(docId).set(subscriber, { merge: true }).catch(() => {});
-          }
-        }
-      }
     } catch (err) {
       console.error("Error deactivating subscriber:", err);
       window.showToast("حدث خطأ أثناء إلغاء تفعيل الاشتراك: " + (err.message || ""), "error");
@@ -1528,6 +1526,97 @@
         window.renderSubscribers(document.getElementById('main-content'));
       }
     }, 'حذف المشترك نهائياً', 'إلغاء', true);
+  };
+
+  if (!window.selectedSubscriberIds) {
+    window.selectedSubscriberIds = new Set();
+  }
+
+  window.toggleSubscriberSelection = function(id, checkbox) {
+    if (!window.selectedSubscriberIds) window.selectedSubscriberIds = new Set();
+    if (checkbox.checked) {
+      window.selectedSubscriberIds.add(String(id));
+    } else {
+      window.selectedSubscriberIds.delete(String(id));
+    }
+    window.updateSelectedSubscribersToolbar();
+  };
+
+  window.toggleSelectAllSubscribers = function(masterCheckbox) {
+    if (!window.selectedSubscriberIds) window.selectedSubscriberIds = new Set();
+    const checkboxes = document.querySelectorAll('.subscriber-row-checkbox');
+    checkboxes.forEach(cb => {
+      cb.checked = masterCheckbox.checked;
+      if (masterCheckbox.checked) {
+        window.selectedSubscriberIds.add(String(cb.value));
+      } else {
+        window.selectedSubscriberIds.delete(String(cb.value));
+      }
+    });
+    window.updateSelectedSubscribersToolbar();
+  };
+
+  window.updateSelectedSubscribersToolbar = function() {
+    const count = window.selectedSubscriberIds ? window.selectedSubscriberIds.size : 0;
+    const btn = document.getElementById('delete-selected-subscribers-btn');
+    const countSpan = document.getElementById('selected-subscribers-count');
+    if (btn && countSpan) {
+      countSpan.textContent = count;
+      btn.style.display = count > 0 ? 'inline-flex' : 'none';
+    }
+  };
+
+  window.deleteSelectedSubscribers = function() {
+    if (!window.selectedSubscriberIds || window.selectedSubscriberIds.size === 0) {
+      window.showToast('الرجاء تحديد مشترك واحد على الأقل للحذف', 'error');
+      return;
+    }
+    const count = window.selectedSubscriberIds.size;
+    window.showConfirmModal(
+      `حذف (${count}) من المشتركين المحددين`,
+      `هل أنت متأكد من رغبتك في حذف ${count} مشتركاً المحددين نهائياً من النظام مع كافة سجلاتهم ومبيعاتهم؟`,
+      async () => {
+        const idsToDelete = Array.from(window.selectedSubscriberIds);
+        window.selectedSubscriberIds.clear();
+        window.updateSelectedSubscribersToolbar();
+
+        for (const id of idsToDelete) {
+          const data = getData();
+          const subscriber = (data.subscribers || []).find(s => 
+            String(s.id) === String(id) || 
+            String(s.docId || '') === String(id) || 
+            (s.deviceNumber && String(s.deviceNumber).trim() === String(id).trim())
+          );
+          const targetSub = subscriber || { id: id };
+          const rawDev = (targetSub.deviceNumber || '').trim();
+          const isRealDevice = typeof getEngine().isRealDeviceNumber === 'function' 
+            ? getEngine().isRealDeviceNumber(rawDev) 
+            : (rawDev && rawDev !== '00' && rawDev !== '-' && rawDev.length >= 2);
+          const deviceNumber = isRealDevice ? rawDev : '';
+          const otherSubsWithSameDevice = isRealDevice 
+            ? (data.subscribers || []).filter(s => String(s.id) !== String(id) && s.deviceNumber && String(s.deviceNumber).trim() === deviceNumber)
+            : [];
+
+          if (typeof getEngine().deleteSubscriberCompletely === 'function') {
+            await getEngine().deleteSubscriberCompletely(targetSub.id || id, otherSubsWithSameDevice.length > 0 ? null : deviceNumber, targetSub);
+          } else {
+            const updatedSubscribers = (data.subscribers || []).filter(s => String(s.id) !== String(id));
+            data.subscribers = updatedSubscribers;
+            if (typeof getEngine().saveLocal === 'function') getEngine().saveLocal();
+            await getEngine().commitData('subscribers', updatedSubscribers);
+          }
+        }
+
+        window.showToast(`تم حذف المشتركين المحددين نهائياً من النظام بنجاح`, 'success');
+
+        if (typeof window.renderSubscribers === 'function') {
+          window.renderSubscribers(document.getElementById('main-content'));
+        }
+      },
+      'حذف المحدد نهائياً',
+      'إلغاء',
+      true
+    );
   };
 
   window.requestRenewal = async function(subId) {
