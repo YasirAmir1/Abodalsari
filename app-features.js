@@ -1011,10 +1011,7 @@
             <p class="subtitle">متابعة تواريخ تفعيل وانتهاء اشتراكات الأجهزة واستيرادها من Excel ونظام التنبيه التلقائي</p>
           </div>
           <div class="header-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
-            <button class="btn btn-primary" onclick="openSaleModal()">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              <span>تسجيل بيع جديد</span>
-            </button>
+
             <button class="btn btn-secondary" onclick="openSubscriberModal()">
               <span>➕</span> <span>إضافة مشترك جديد</span>
             </button>
@@ -1165,7 +1162,7 @@
         </div>
 
           
-        <!-- Status Classification Toolbar & Quick Actions above Subscribers Table (تصنيف المشتركين وزر تسجيل بيع جديد) -->
+        <!-- Status Classification Toolbar & Quick Actions above Subscribers Table -->
         <div class="subscribers-status-filter-toolbar">
           <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
             <span style="font-size: 0.9rem; font-weight: 800; color: var(--text); display: flex; align-items: center; gap: 6px;">
@@ -1192,11 +1189,8 @@
             </div>
           </div>
           <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-            <!-- نسخة طبق الأصل لزر تسجيل بيع جديد بنفس الخصائص والمواصفات والعمل -->
-            <button type="button" class="btn btn-primary" onclick="window.openSaleModal()" title="تسجيل بيع جديد وتفعيل اشتراك" style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.84rem; padding: 6px 14px; font-weight: 700;">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" width="16" height="16" style="vertical-align: middle;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              <span>تسجيل بيع جديد</span>
-            </button>
+
+
             <div style="font-size: 0.85rem; color: var(--muted); font-weight: 600;">
               عرض <strong style="color: var(--text);">${subs.length}</strong> من إجمالي <strong style="color: var(--text);">${countAll}</strong> مشترك
             </div>
@@ -2724,31 +2718,60 @@
   };
 
   window.confirmDeleteAllSubscribers = function() {
-    showConfirmDialog(
-      'حذف جميع المشتركين والتعاملات المالية',
-      'هل أنت متأكد تماماً من رغبتك في حذف كافة المشتركين وسجل المبيعات والديون وكل التعاملات المالية المرتبطة بالزبائن دفعة واحدة؟ هذا الإجراء نهائي ولا يمكن التراجع عنه!',
-      async () => {
-        const data = getData();
-        (data.subscribers || []).forEach(s => {
-          if (getEngine() && typeof getEngine().addDeletedSubscriberTombstone === 'function') {
-            getEngine().addDeletedSubscriberTombstone(s.id, s.deviceNumber, s.name, s.phone);
-          }
-        });
-        try {
-          localStorage.setItem('sari_all_subscribers_cleared', 'true');
-          localStorage.setItem('sari_subscribers_cleared_timestamp', String(Date.now()));
-        } catch (e) {}
+    const modalContainer = document.getElementById('modal-container');
+    if (!modalContainer) return;
 
-        await getEngine().clearCollection('subscribers');
-        await getEngine().clearCollection('sales');
-        await getEngine().clearCollection('debts');
-        await getEngine().clearCollection('agentSubmissions');
-        showToast('تم حذف كافة المشتركين والتعاملات المالية وسجل المبيعات والديون بنجاح', 'success');
-        if (typeof window.renderSubscribers === 'function') {
-          window.renderSubscribers(document.getElementById('main-content'));
-        }
+    modalContainer.innerHTML = `
+      <div class="modal-overlay active" style="z-index: 9999;" onclick="if (event.target === this) window.closeModal()">
+        <div class="modal-dialog" style="max-width: 450px; text-align: right; direction: rtl;" onclick="event.stopPropagation()">
+          <div class="modal-header">
+            <h3 style="color: #ef4444;">تحذير: حذف جميع المشتركين</h3>
+            <button type="button" class="modal-close" onclick="window.closeModal()">✕</button>
+          </div>
+          <div class="modal-body">
+            <p>هل أنت متأكد تماماً؟ هذا الإجراء سيؤدي إلى مسح <strong>كافة</strong> المشتركين، سجلات المبيعات، والديون نهائياً. لا يمكن التراجع عن هذه الخطوة.</p>
+            <p>للتأكيد، يرجى كتابة كلمة <strong>DELETE</strong> في الخانة أدناه:</p>
+            <input type="text" id="confirm-delete-input" class="form-control" placeholder="اكتب DELETE هنا" style="width: 100%; padding: 8px; margin-top: 8px;">
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="window.closeModal()">إلغاء</button>
+            <button type="button" class="btn btn-danger" onclick="window.executeDeleteAllSubscribers()">حذف الكل</button>
+          </div>
+        </div>
+      </div>
+    `;
+  };
+
+  window.executeDeleteAllSubscribers = async function() {
+    const input = document.getElementById('confirm-delete-input');
+    if (input.value !== 'DELETE') {
+      window.showToast('كلمة التأكيد غير صحيحة. يرجى كتابة DELETE', 'error');
+      return;
+    }
+
+    window.closeModal();
+    window.showToast('جاري الحذف، يرجى الانتظار...', 'info');
+
+    const data = getData();
+    (data.subscribers || []).forEach(s => {
+      if (getEngine() && typeof getEngine().addDeletedSubscriberTombstone === 'function') {
+        getEngine().addDeletedSubscriberTombstone(s.id, s.deviceNumber, s.name, s.phone);
       }
-    );
+    });
+    try {
+      localStorage.setItem('sari_all_subscribers_cleared', 'true');
+      localStorage.setItem('sari_subscribers_cleared_timestamp', String(Date.now()));
+    } catch (e) {}
+
+    await getEngine().clearCollection('subscribers');
+    await getEngine().clearCollection('sales');
+    await getEngine().clearCollection('debts');
+    await getEngine().clearCollection('agentSubmissions');
+    
+    window.showToast('تم حذف كافة المشتركين والتعاملات المالية وسجل المبيعات والديون بنجاح', 'success');
+    if (typeof window.renderSubscribers === 'function') {
+      window.renderSubscribers(document.getElementById('main-content'));
+    }
   };
 
   window.submitAgentSale = async function(saleData) {

@@ -24,16 +24,37 @@ try {
 
 function markFirestoreQuotaExceeded() {
   window.firestoreQuotaExceeded = true;
+  
+  // UI and Console Feedback
+  console.warn("🚨 [CRITICAL] Firestore quota exceeded! All write operations are temporarily locked to protect the project.");
+  alert("تنبيه: تم الوصول إلى الحد الأقصى لحصة فايرستور اليومية. تم ايقاف العمليات مؤقتاً لتجنب حظر المشروع.");
+
   try {
     const today = new Date().toISOString().substring(0, 10);
     localStorage.setItem('sari_firestore_quota_exceeded', 'true');
     localStorage.setItem('sari_firestore_quota_date', today);
   } catch (e) {}
+  
+  // Override configuration to signal no Firebase
+  window.isFirebaseConfigured = function() { return false; };
+
   try {
-    if (window.syncEngine && window.syncEngine.db && typeof window.syncEngine.db.disableNetwork === 'function') {
-      window.syncEngine.db.disableNetwork().catch(() => {});
+    if (window.syncEngine) {
+      if (typeof window.syncEngine.broadcastChannel?.postMessage === 'function') {
+        window.syncEngine.broadcastChannel.postMessage({ type: 'QUOTA_EXCEEDED' });
+      }
+      if (typeof window.syncEngine.db?.disableNetwork === 'function') {
+        window.syncEngine.db.disableNetwork().catch(() => {});
+      }
+      if (typeof window.syncEngine.stopRealtimeSync === 'function') {
+        window.syncEngine.stopRealtimeSync();
+      }
+      window.syncEngine.db = null;
     }
   } catch (e) {}
+  
+  // Force reload
+  window.location.reload();
 }
 
 
@@ -583,6 +604,9 @@ class SariSyncEngine {
           if (event.data && event.data.type === 'DATA_UPDATED') {
             this.data = this.loadLocal();
             window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: event.data.collection || 'all' } }));
+          } else if (event.data && event.data.type === 'QUOTA_EXCEEDED') {
+            window.firestoreQuotaExceeded = true;
+            window.location.reload();
           }
         };
       } catch (e) {}
@@ -858,7 +882,9 @@ class SariSyncEngine {
             const norm = this.normalizeSubscriberName(name);
             if (norm) payload.names = firebase.firestore.FieldValue.arrayRemove(norm);
           }
-          tDoc.set(payload, { merge: true }).catch(() => {});
+          tDoc.set(payload, { merge: true }).catch(err => {
+            if (this.isQuotaError(err)) markFirestoreQuotaExceeded();
+          });
         } catch (e) {}
       }
     } catch (e) {}
@@ -1103,12 +1129,6 @@ class SariSyncEngine {
       this.resetQuota();
     }
 
-    if (window.firestoreQuotaExceeded) {
-      console.warn('Firestore quota exceeded. Operating purely in local storage mode.');
-      this.db = null;
-      return;
-    }
-
     if (typeof firebase === 'undefined') {
       console.warn('Firebase SDK not loaded, operating in local storage mode.');
       return;
@@ -1150,12 +1170,7 @@ class SariSyncEngine {
         }
         console.log('Firebase initialized with projectId:', cfg.projectId, 'databaseId:', databaseId);
 
-        if (window.firestoreQuotaExceeded && this.db && typeof this.db.disableNetwork === 'function') {
-          this.db.disableNetwork().catch(() => {});
-          console.log('Firestore network disabled due to prior quota exhaustion.');
-        }
-
-        // Fetch central data and seed if needed
+        // Fetch central data and start real-time sync
         this.syncInitialDataFromCentral().then(() => {
           this.startRealtimeSync();
         });
@@ -1165,55 +1180,15 @@ class SariSyncEngine {
     }
   }
 
-  // Ensure central Firestore is initialized and seeded with accounts and data
+  // Ensure central Firestore is synchronized across devices
   async syncInitialDataFromCentral() {
     if (!this.db || !window.isFirebaseConfigured || !window.isFirebaseConfigured()) return;
     try {
-      // Run agent purge once per session to save write operations
-      if (!window.firestoreQuotaExceeded && !sessionStorage.getItem('sari_agents_purged_flag')) {
-        sessionStorage.setItem('sari_agents_purged_flag', 'true');
-        this.purgeDeletedAgentsFromFirestore().catch(() => {});
-      }
-
-      // Check if users collection exists in central Firestore
-      const usersSnap = await this.db.collection('users').get().catch(() => null);
-      if (!window.firestoreQuotaExceeded && (!usersSnap || usersSnap.empty)) {
-        console.log('Central Firestore empty, seeding initial data...');
-        const batch = this.db.batch();
-        DEFAULT_USERS.forEach(u => {
-          const uRef = this.db.collection('users').doc((u.username || u.uid).toLowerCase());
-          batch.set(uRef, u, { merge: true });
-        });
-        DEFAULT_AGENTS.forEach(ag => {
-          const agRef = this.db.collection('agents').doc(ag.id);
-          batch.set(agRef, ag, { merge: true });
-        });
-        const pRef = this.db.collection('pricing').doc('default');
-        batch.set(pRef, DEFAULT_PRICING, { merge: true });
-        const tRef = this.db.collection('templates').doc('main');
-        batch.set(tRef, { id: 'main', whatsapp: DEFAULT_WHATSAPP_TEMPLATE }, { merge: true });
-        DEFAULT_SUBSCRIBERS.forEach(s => {
-          const sRef = this.db.collection('subscribers').doc(s.id);
-          batch.set(sRef, s, { merge: true });
-        });
-        DEFAULT_SALES.forEach(s => {
-          const sRef = this.db.collection('sales').doc(s.id);
-          batch.set(sRef, s, { merge: true });
-        });
-        DEFAULT_DEBTS.forEach(d => {
-          const dRef = this.db.collection('debts').doc(d.id);
-          batch.set(dRef, d, { merge: true });
-        });
-        await batch.commit();
-        console.log('Central Firestore initial seed complete.');
-      }
-
       await this.fetchAllCentralCollections();
     } catch (e) {
       if (this.isQuotaError(e)) {
         markFirestoreQuotaExceeded();
         console.warn('Firestore quota limit reached during sync. Operating in local persistence mode.');
-        try { await this.fetchAllCentralCollections(); } catch(err) {}
       } else {
         console.warn('Central sync warning:', e?.message || e);
       }
@@ -1819,7 +1794,7 @@ class SariSyncEngine {
 
   // Real-time Central Firestore synchronization (Automatic Two-Way Propagation across all devices)
   startRealtimeSync() {
-    if (!this.db) return;
+    if (!this.db || window.firestoreQuotaExceeded) return;
     this.stopRealtimeSync();
 
     const user = this.currentUser || { role: 'admin' };
