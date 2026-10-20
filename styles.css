@@ -779,6 +779,9 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 14px;
   border-radius: var(--radius-full);
   font-size: 0.84rem;
@@ -790,6 +793,27 @@ h1, h2, h3, h4, h5, h6 {
   transition: var(--transition);
 }
 
+.chip-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  font-size: 0.73rem;
+  font-weight: 800;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--text, #1e293b);
+  line-height: 1;
+  transition: background 0.2s, color 0.2s;
+}
+
+[data-theme="dark"] .chip-count-badge {
+  background: rgba(255, 255, 255, 0.12);
+  color: #f1f5f9;
+}
+
 .chip:hover {
   color: var(--green);
   border-color: var(--green);
@@ -799,6 +823,11 @@ h1, h2, h3, h4, h5, h6 {
   background: var(--green);
   color: #fff;
   border-color: var(--green);
+}
+
+.chip.active .chip-count-badge {
+  background: rgba(255, 255, 255, 0.3) !important;
+  color: #fff !important;
 }
 
 .search-box {
@@ -3830,7 +3859,7 @@ input[type="date"] {
     display: flex !important;
   }
   /* Expand indicator */
-  .subscribers-table tr td:first-child::after {
+  .subscribers-table tr td:nth-child(2)::after {
     content: ' ▾ (اضغط للتوسيع)';
     font-size: 0.7rem;
     color: var(--primary);
@@ -3838,8 +3867,87 @@ input[type="date"] {
     display: block;
     margin-top: 4px;
   }
-  .subscribers-table tr.expanded-mobile-card td:first-child::after {
+  .subscribers-table tr.expanded-mobile-card td:nth-child(2)::after {
     content: ' ▴ (إخفاء التفاصيل)';
   }
+}
+
+/* --------------------------------------------------------------------------
+   Subscribers Bulk Actions Toolbar & Checkbox Column (تعديل مجمع)
+   -------------------------------------------------------------------------- */
+.subscribers-bulk-toolbar {
+  position: sticky;
+  top: 68px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--primary, #2563eb);
+  border-radius: 12px;
+  padding: 10px 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  animation: slideDownFade 0.25s ease-out;
+}
+
+@keyframes slideDownFade {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.bulk-toolbar-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bulk-badge {
+  background: rgba(37, 99, 235, 0.12);
+  color: var(--primary, #2563eb);
+  border: 1px solid rgba(37, 99, 235, 0.3);
+  font-weight: 800;
+  font-size: 0.88rem;
+  padding: 4px 12px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bulk-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bulk-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 0.82rem;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.subscriber-row-checkbox,
+#select-all-subscribers-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--primary, #2563eb);
+  vertical-align: middle;
 }
 

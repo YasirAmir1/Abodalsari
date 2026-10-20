@@ -2102,7 +2102,7 @@
           <div class="header-text">
             <span class="greeting-small">إدارة الحسابات والأدوار</span>
             <h1>حساب الادمن</h1>
-            <p class="subtitle">حسابات الدخول للأدمن وربطها مع Firebase Auth</p>
+            <p class="subtitle">إدارة حسابات الدخول والمدراء وكلمات المرور والصلاحيات</p>
           </div>
         </div>
 

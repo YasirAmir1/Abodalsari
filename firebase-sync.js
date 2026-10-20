@@ -25,17 +25,13 @@ try {
 function markFirestoreQuotaExceeded() {
   window.firestoreQuotaExceeded = true;
   
-  // UI and Console Feedback
-  console.warn("🚨 [CRITICAL] Firestore quota exceeded! All write operations are temporarily locked to protect the project.");
-  alert("تنبيه: تم الوصول إلى الحد الأقصى لحصة فايرستور اليومية. تم ايقاف العمليات مؤقتاً لتجنب حظر المشروع.");
-
   try {
     const today = new Date().toISOString().substring(0, 10);
     localStorage.setItem('sari_firestore_quota_exceeded', 'true');
     localStorage.setItem('sari_firestore_quota_date', today);
   } catch (e) {}
   
-  // Override configuration to signal no Firebase
+  // Override configuration to signal local-mode fallback
   window.isFirebaseConfigured = function() { return false; };
 
   try {
@@ -52,9 +48,6 @@ function markFirestoreQuotaExceeded() {
       window.syncEngine.db = null;
     }
   } catch (e) {}
-  
-  // Force reload
-  window.location.reload();
 }
 
 
@@ -596,7 +589,7 @@ class SariSyncEngine {
     this.unsubscribers = [];
     this.saveQueue = [];
     this.isSaving = false;
-    this.broadcastChannel = null;
+    this.lastSyncedSnapshots = {};
     if (typeof BroadcastChannel !== 'undefined') {
       try {
         this.broadcastChannel = new BroadcastChannel('sari_sync_channel');
@@ -606,7 +599,6 @@ class SariSyncEngine {
             window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: event.data.collection || 'all' } }));
           } else if (event.data && event.data.type === 'QUOTA_EXCEEDED') {
             window.firestoreQuotaExceeded = true;
-            window.location.reload();
           }
         };
       } catch (e) {}
@@ -940,32 +932,14 @@ class SariSyncEngine {
       });
     }
 
-    // Check if entire subscriber collection was cleared previously
-    const allCleared = localStorage.getItem('sari_all_subscribers_cleared') === 'true';
-    const clearedTimestamp = Number(localStorage.getItem('sari_subscribers_cleared_timestamp') || '0');
-
+    // Only filter subscribers if explicit ID tombstone was recorded and not in central DB mode
     if (Array.isArray(dataObj.subscribers)) {
-      if (allCleared && dataObj.subscribers.length > 0) {
-        dataObj.subscribers = dataObj.subscribers.filter(s => {
-          const created = Number(s.createdAtTimestamp || 0);
-          return created > clearedTimestamp;
-        });
-      }
-
-      if (ids.size > 0 || devices.size > 0 || names.size > 0 || phones.size > 0) {
+      if (ids.size > 0 && (!this.db || !window.isFirebaseConfigured || !window.isFirebaseConfigured())) {
         dataObj.subscribers = dataObj.subscribers.filter(s => {
           const sId = String(s.id || '').trim();
           const sDocId = String(s.docId || '').trim();
-          const sDev = String(s.deviceNumber || '').trim();
-          const sDevClean = sDev.replace(/^00+/, '');
-          const sName = this.normalizeSubscriberName(s.name);
-          const sPhone = String(s.phone || '').trim().replace(/\D/g, '');
-
           if (sId && ids.has(sId)) return false;
           if (sDocId && ids.has(sDocId)) return false;
-          if (this.isRealDeviceNumber(sDev) && (devices.has(sDev) || (sDevClean && devices.has(sDevClean)))) return false;
-          if (sName && names.has(sName)) return false;
-          if (sPhone && sPhone.length >= 7 && phones.has(sPhone)) return false;
           return true;
         });
       }
@@ -1380,13 +1354,15 @@ class SariSyncEngine {
                 s.status = act;
                 s.activeStatus = act;
               });
-              const tempObj = { subscribers: remoteRecords };
-              this.applyTombstoneFilter(tempObj);
-              this.data.subscribers = tempObj.subscribers;
+              this.data.subscribers = remoteRecords;
+              if (!this.lastSyncedSnapshots['subscribers']) this.lastSyncedSnapshots['subscribers'] = new Map();
+              remoteRecords.forEach(r => this.lastSyncedSnapshots['subscribers'].set(String(r.id), JSON.stringify(r)));
             } else {
               const tempObj = { [col]: remoteRecords };
               this.applyTombstoneFilter(tempObj);
               this.data[col] = tempObj[col];
+              if (!this.lastSyncedSnapshots[col]) this.lastSyncedSnapshots[col] = new Map();
+              remoteRecords.forEach(r => this.lastSyncedSnapshots[col].set(String(r.id), JSON.stringify(r)));
             }
             updatedAny = true;
           }
@@ -1881,13 +1857,15 @@ class SariSyncEngine {
               s.status = act;
               s.activeStatus = act;
             });
-            const tempObj = { subscribers: remoteRecords };
-            this.applyTombstoneFilter(tempObj);
-            this.data.subscribers = tempObj.subscribers;
+            this.data.subscribers = remoteRecords;
+            if (!this.lastSyncedSnapshots['subscribers']) this.lastSyncedSnapshots['subscribers'] = new Map();
+            remoteRecords.forEach(r => this.lastSyncedSnapshots['subscribers'].set(String(r.id), JSON.stringify(r)));
           } else {
             const tempObj = { [col]: remoteRecords };
             this.applyTombstoneFilter(tempObj);
             this.data[col] = tempObj[col];
+            if (!this.lastSyncedSnapshots[col]) this.lastSyncedSnapshots[col] = new Map();
+            remoteRecords.forEach(r => this.lastSyncedSnapshots[col].set(String(r.id), JSON.stringify(r)));
           }
 
           // If current user is purged agent, logout immediately
@@ -2038,7 +2016,111 @@ class SariSyncEngine {
     }
   }
 
-  // Granular Delta-based Commit: writes ONLY modified/new documents and deletes removed ones
+  // Save or update a single subscriber directly and immediately to Firestore
+  async saveSubscriberDirect(sub) {
+    if (!sub) return;
+    const norm = { ...sub };
+    if (!norm.id) norm.id = 'sub-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7);
+    if (norm.deviceNumber) norm.deviceNumber = window.formatDeviceNumber(norm.deviceNumber);
+    if (!norm.createdAtTimestamp) norm.createdAtTimestamp = Date.now();
+    norm.updatedAt = new Date().toISOString();
+
+    const currentSubs = Array.isArray(this.data.subscribers) ? [...this.data.subscribers] : [];
+    const idx = currentSubs.findIndex(s => String(s.id) === String(norm.id) || (norm.docId && String(s.docId) === String(norm.docId)));
+    if (idx >= 0) {
+      currentSubs[idx] = norm;
+    } else {
+      currentSubs.unshift(norm);
+    }
+    this.data.subscribers = currentSubs;
+    this.saveLocal();
+    window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'subscribers' } }));
+
+    if (this.db && window.isFirebaseConfigured && window.isFirebaseConfigured()) {
+      try {
+        await this.db.collection('subscribers').doc(norm.id).set(norm, { merge: true });
+        if (!this.lastSyncedSnapshots['subscribers']) this.lastSyncedSnapshots['subscribers'] = new Map();
+        this.lastSyncedSnapshots['subscribers'].set(String(norm.id), JSON.stringify(norm));
+        console.log(`[FirebaseSync] Subscriber ${norm.id} directly committed to Firestore.`);
+      } catch (err) {
+        if (this.isQuotaError(err)) markFirestoreQuotaExceeded();
+        console.warn('Error in saveSubscriberDirect:', err);
+      }
+    }
+  }
+
+  // Fast Atomic Bulk Deletion of subscribers and cascade records
+  async bulkDeleteSubscribers(idsToDelete) {
+    if (!Array.isArray(idsToDelete) || idsToDelete.length === 0) return;
+    const targetIds = new Set(idsToDelete.map(x => String(x)));
+
+    // Find cascade records
+    const devNumbers = new Set();
+    const subNames = new Set();
+
+    (this.data.subscribers || []).forEach(s => {
+      if (targetIds.has(String(s.id)) || (s.docId && targetIds.has(String(s.docId)))) {
+        if (s.deviceNumber && this.isRealDeviceNumber(s.deviceNumber)) devNumbers.add(String(s.deviceNumber).trim());
+        if (s.name) subNames.add(this.normalizeSubscriberName(s.name));
+      }
+    });
+
+    const deletedSaleIds = [];
+    (this.data.sales || []).forEach(s => {
+      const matchId = s.subscriberId && targetIds.has(String(s.subscriberId));
+      const matchDev = s.deviceNumber && devNumbers.has(String(s.deviceNumber).trim());
+      const matchName = s.customerName && subNames.has(this.normalizeSubscriberName(s.customerName));
+      if (matchId || matchDev || matchName) {
+        if (s.id) deletedSaleIds.push(s.id);
+      }
+    });
+
+    const deletedDebtIds = [];
+    (this.data.debts || []).forEach(d => {
+      const matchId = d.subscriberId && targetIds.has(String(d.subscriberId));
+      const matchDev = d.deviceNumber && devNumbers.has(String(d.deviceNumber).trim());
+      const matchName = d.customerName && subNames.has(this.normalizeSubscriberName(d.customerName));
+      if (matchId || matchDev || matchName) {
+        if (d.id) deletedDebtIds.push(d.id);
+      }
+    });
+
+    // Update local state
+    this.data.subscribers = (this.data.subscribers || []).filter(s => !targetIds.has(String(s.id)) && !(s.docId && targetIds.has(String(s.docId))));
+    this.data.sales = (this.data.sales || []).filter(s => !deletedSaleIds.includes(s.id));
+    this.data.debts = (this.data.debts || []).filter(d => !deletedDebtIds.includes(d.id));
+
+    this.saveLocal();
+    window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'all' } }));
+    window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: 'subscribers' } }));
+
+    // Delete from Firestore in atomic batches
+    if (this.db && window.isFirebaseConfigured && window.isFirebaseConfigured()) {
+      try {
+        const batch = this.db.batch();
+        targetIds.forEach(id => {
+          batch.delete(this.db.collection('subscribers').doc(id));
+        });
+        deletedSaleIds.forEach(id => {
+          batch.delete(this.db.collection('sales').doc(id));
+        });
+        deletedDebtIds.forEach(id => {
+          batch.delete(this.db.collection('debts').doc(id));
+        });
+        await batch.commit();
+
+        if (this.lastSyncedSnapshots['subscribers']) {
+          targetIds.forEach(id => this.lastSyncedSnapshots['subscribers'].delete(id));
+        }
+        console.log(`[FirebaseSync] Bulk deleted ${targetIds.size} subscribers from Firestore.`);
+      } catch (err) {
+        if (this.isQuotaError(err)) markFirestoreQuotaExceeded();
+        console.warn('Error bulk deleting subscribers from Firestore:', err);
+      }
+    }
+  }
+
+  // Granular Delta-based Commit: writes modified/new documents and deletes removed ones
   async commitData(collectionName, updatedItems) {
     const isAdmin = this.isAdminUser();
     if (collectionName === 'subscribers' && !isAdmin) {
@@ -2046,7 +2128,6 @@ class SariSyncEngine {
       return;
     }
 
-    const previousItems = this.data[collectionName];
     this.data[collectionName] = updatedItems;
     this.saveLocal();
     window.dispatchEvent(new CustomEvent('sari:data-updated', { detail: { collection: collectionName } }));
@@ -2058,32 +2139,34 @@ class SariSyncEngine {
         } else if (collectionName === 'templates') {
           await this.db.collection('templates').doc('main').set(updatedItems || {}, { merge: true });
         } else if (Array.isArray(updatedItems)) {
-          const oldList = Array.isArray(previousItems) ? previousItems : [];
-          const oldMap = new Map();
-          oldList.forEach(item => { if (item && item.id) oldMap.set(String(item.id), item); });
-
+          if (!this.lastSyncedSnapshots[collectionName]) {
+            this.lastSyncedSnapshots[collectionName] = new Map();
+          }
+          const syncedMap = this.lastSyncedSnapshots[collectionName];
           const newMap = new Map();
           const changedOrNew = [];
+
           updatedItems.forEach(item => {
             if (!item) return;
-            const id = item.id || 'doc-' + Math.random().toString(36).substring(2, 9);
+            const id = String(item.id || item.docId || ('doc-' + Math.random().toString(36).substring(2, 9)));
             item.id = id;
-            newMap.set(String(id), item);
-            const old = oldMap.get(String(id));
-            if (!old || JSON.stringify(old) !== JSON.stringify(item)) {
+            newMap.set(id, item);
+            const syncedStr = syncedMap.get(id);
+            const currentStr = JSON.stringify(item);
+            if (!syncedStr || syncedStr !== currentStr) {
               changedOrNew.push(item);
             }
           });
 
           const deletedIds = [];
-          oldList.forEach(oldItem => {
-            if (oldItem && oldItem.id && !newMap.has(String(oldItem.id))) {
-              deletedIds.push(String(oldItem.id));
+          syncedMap.forEach((_, id) => {
+            if (!newMap.has(id)) {
+              deletedIds.push(id);
             }
           });
 
-          // Write only actual additions/changes (saves 99% of Firestore daily write quota!)
-          if (changedOrNew.length > 0 || deletedIds.length > 0) {
+          // Write additions/modifications
+          if (changedOrNew.length > 0) {
             const batchSize = 100;
             for (let i = 0; i < changedOrNew.length; i += batchSize) {
               const batch = this.db.batch();
@@ -2092,27 +2175,38 @@ class SariSyncEngine {
                 const norm = { ...item };
                 if (norm.deviceNumber) norm.deviceNumber = window.formatDeviceNumber(norm.deviceNumber);
                 if (norm.number && collectionName === 'codes') norm.number = window.formatDeviceNumber(norm.number);
+                if (collectionName === 'subscribers' && !norm.createdAtTimestamp) {
+                  norm.createdAtTimestamp = Date.now();
+                }
+                norm.updatedAt = new Date().toISOString();
                 batch.set(this.db.collection(collectionName).doc(item.id), norm, { merge: true });
                 if (collectionName === 'users' && item.username) {
                   batch.set(this.db.collection('users').doc(item.username.toLowerCase()), norm, { merge: true });
                 }
               });
               await batch.commit();
+              chunk.forEach(item => {
+                syncedMap.set(String(item.id), JSON.stringify(item));
+              });
             }
+          }
 
+          // Write deletions
+          if (deletedIds.length > 0) {
+            const batchSize = 100;
             for (let i = 0; i < deletedIds.length; i += batchSize) {
               const batch = this.db.batch();
               const chunk = deletedIds.slice(i, i + batchSize);
               chunk.forEach(id => {
                 batch.delete(this.db.collection(collectionName).doc(id));
-                if (collectionName === 'users') {
-                  const oldUser = oldMap.get(id);
-                  if (oldUser && oldUser.username) {
-                    batch.delete(this.db.collection('users').doc(oldUser.username.toLowerCase()));
-                  }
+                if (collectionName === 'users' && id) {
+                  batch.delete(this.db.collection('users').doc(id.toLowerCase()));
                 }
               });
               await batch.commit();
+              chunk.forEach(id => {
+                syncedMap.delete(id);
+              });
             }
           }
         }

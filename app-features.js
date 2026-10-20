@@ -920,9 +920,23 @@
     const countActive = allSubsOriginal.filter(s => s.status === 'فعال').length;
     const countInactive = allSubsOriginal.filter(s => s.status === 'غير فعال').length;
     const countExpiring = expiringSoonSubs.length;
+    const countHQ = allSubsOriginal.filter(s => { 
+      const o = String(s.owner || '').trim(); 
+      return !o || o === 'المركز الرئيسي' || o === 'الرئيسية' || o === 'الادارة' || o === 'الإدارة' || o === 'main' || o === 'hq'; 
+    }).length;
 
     if (subFilter.owner !== 'all') {
-      subs = subs.filter(s => s.owner === subFilter.owner);
+      if (subFilter.owner === 'المركز الرئيسي') {
+        subs = subs.filter(s => {
+          const o = String(s.owner || '').trim();
+          return !o || o === 'المركز الرئيسي' || o === 'الرئيسية' || o === 'الادارة' || o === 'الإدارة' || o === 'main' || o === 'hq';
+        });
+      } else {
+        subs = subs.filter(s => {
+          const o = String(s.owner || '').trim();
+          return o === subFilter.owner || (window.resolveAgentName && window.resolveAgentName(s) === subFilter.owner);
+        });
+      }
     }
     if (subFilter.status === 'منتهي قريباً' || subFilter.expiring === '7days') {
       subs = subs.filter(s => expiringSoonSubs.some(exp => exp.id === s.id));
@@ -1112,13 +1126,28 @@
             <div class="filter-group-row">
               <span class="filter-group-label">الوكيل المسؤول:</span>
               <div class="filter-chips-wrap">
-                <span class="chip ${subFilter.owner === 'all' ? 'active' : ''}" onclick="setSubFilter('owner', 'all')">الكل (${countAll})</span>
-                <span class="chip ${subFilter.owner === 'المركز الرئيسي' ? 'active' : ''}" onclick="setSubFilter('owner', 'المركز الرئيسي')">المركز الرئيسي (${allSubsOriginal.filter(s => { const o = String(s.owner || '').trim(); return !o || o === 'المركز الرئيسي' || o === 'الرئيسية' || o === 'الادارة' || o === 'الإدارة' || o === 'main' || o === 'hq'; }).length})</span>
+                <span class="chip ${subFilter.owner === 'all' ? 'active' : ''}" onclick="setSubFilter('owner', 'all')">
+                  <span class="chip-count-badge">${countAll}</span>
+                  <span>الكل</span>
+                  <small class="agent-count-small" style="font-size: 0.72rem; font-weight: 700; opacity: 0.85; margin-inline-start: 4px;">(${countAll})</small>
+                </span>
+                <span class="chip ${subFilter.owner === 'المركز الرئيسي' ? 'active' : ''}" onclick="setSubFilter('owner', 'المركز الرئيسي')">
+                  <span class="chip-count-badge">${countHQ}</span>
+                  <span>المركز الرئيسي</span>
+                  <small class="agent-count-small" style="font-size: 0.72rem; font-weight: 700; opacity: 0.85; margin-inline-start: 4px;">(${countHQ})</small>
+                </span>
                 ${agents.map(a => {
-                  const agentSubCount = allSubsOriginal.filter(s => String(s.owner || '').trim() === a.name).length;
+                  const agentSubCount = allSubsOriginal.filter(s => {
+                    const o = String(s.owner || '').trim();
+                    return o === a.name || (window.resolveAgentName && window.resolveAgentName(s) === a.name);
+                  }).length;
                   return `
-                  <span class="chip ${subFilter.owner === a.name ? 'active' : ''}" onclick="setSubFilter('owner', '${escapeHtml(a.name)}')">${escapeHtml(a.name)} (${agentSubCount})</span>
-                `}).join('')}
+                  <span class="chip ${subFilter.owner === a.name ? 'active' : ''}" onclick="setSubFilter('owner', '${escapeHtml(a.name)}')">
+
+                    <span class="agent-count-small" style="font-size: 0.72rem; font-weight: 700; opacity: 0.85; margin-inline-end: 4px;">(${agentSubCount})</span>
+                    <span>${escapeHtml(a.name)}</span>
+                  </span>
+                `;}).join('')}
               </div>
             </div>
 
@@ -1197,11 +1226,48 @@
           </div>
         </div>
 
+        <!-- Floating/Sticky Bulk Actions Toolbar for Mass Updates (تعديل مجمع) -->
+        <div id="subscribers-bulk-toolbar" class="subscribers-bulk-toolbar" style="display: ${window.selectedSubscriberIds && window.selectedSubscriberIds.size > 0 ? 'flex' : 'none'};">
+          <div class="bulk-toolbar-info">
+            <span class="bulk-badge">
+              <span>✓</span>
+              <span>تم تحديد <strong id="bulk-selected-count">${window.selectedSubscriberIds ? window.selectedSubscriberIds.size : 0}</strong> مشترك</span>
+            </span>
+          </div>
+          <div class="bulk-toolbar-actions">
+            <button type="button" class="btn btn-primary btn-sm bulk-action-btn" onclick="window.openBulkRenewModal()" title="تجديد جماعي للمشتركين المحددين وتحديث تاريخ الانتهاء">
+              <span>🔄</span>
+              <span>تجديد جماعي</span>
+            </button>
+            <button type="button" class="btn btn-warning btn-sm bulk-action-btn" onclick="window.openBulkStatusModal()" title="تغيير حالة المشتركين المحددين (فعال / غير فعال / دفع)">
+              <span>⚡</span>
+              <span>تغيير الحالة</span>
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm bulk-action-btn" onclick="window.openBulkEditModal()" title="تعديل مجمع شامل للمشتركين المحددين (المدة، الأسعار، الوكيل، التواريخ)">
+              <span>✏️</span>
+              <span>تعديل مجمع</span>
+            </button>
+            <button type="button" class="btn btn-danger btn-sm bulk-action-btn" onclick="window.deleteSelectedSubscribers()" title="حذف المشتركين المحددين نهائياً">
+              <span>🗑️</span>
+              <span>حذف المحدد</span>
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm bulk-action-btn" onclick="window.clearSubscriberSelection()" title="إلغاء التحديد">
+              <span>✕</span>
+              <span>إلغاء التحديد</span>
+            </button>
+          </div>
+        </div>
+
         <div class="table-responsive">
           <table class="data-table subscribers-table">
               <thead>
                 <tr>
-                  <th style="width: 40px; text-align: center;"><input type="checkbox" id="select-all-subscribers-checkbox" onclick="toggleSelectAllSubscribers(this)" title="تحديد الكل"></th>
+                  <th style="width: 48px; text-align: center; vertical-align: middle;" title="تحديد الكل للتعديل المجمع">
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;">
+                      <input type="checkbox" id="select-all-subscribers-checkbox" onclick="toggleSelectAllSubscribers(this)" title="تحديد الكل للتعديل المجمع">
+                      <span style="font-size: 0.62rem; color: var(--muted); font-weight: 700; user-select: none;">تحديد</span>
+                    </div>
+                  </th>
                   <th>المشترك / الهاتف</th>
                   <th>رقم الجهاز</th>
                   <th>الوكيل المسؤول</th>
@@ -1221,15 +1287,26 @@
 
         <!-- الفقرة الأخيرة في أسفل صفحة المشتركون وأجهزة البث -->
         <div class="page-bottom-actions" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; padding-top: 14px; margin-top: 6px; gap: 10px;">
-          <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
             <button class="btn btn-secondary" onclick="openExcelImportSubscribersModal()">
               <span>📥</span> <span>استدعاء المشتركين من Excel</span>
             </button>
             <button class="btn btn-secondary" onclick="exportSubscribersExcel()">
               <span>📤</span> <span>تصدير Excel</span>
             </button>
+            
+            <!-- Mass Action Buttons in bottom bar -->
+            <button class="btn btn-primary btn-sm" id="bulk-renew-subscribers-btn" onclick="window.openBulkRenewModal()" style="display: ${window.selectedSubscriberIds && window.selectedSubscriberIds.size > 0 ? 'inline-flex' : 'none'}; align-items: center; gap: 6px; font-weight: 700;">
+              <span>🔄</span> <span>تجديد جماعي (<span class="selected-count-badge">${window.selectedSubscriberIds ? window.selectedSubscriberIds.size : 0}</span>)</span>
+            </button>
+            <button class="btn btn-warning btn-sm" id="bulk-status-subscribers-btn" onclick="window.openBulkStatusModal()" style="display: ${window.selectedSubscriberIds && window.selectedSubscriberIds.size > 0 ? 'inline-flex' : 'none'}; align-items: center; gap: 6px; font-weight: 700;">
+              <span>⚡</span> <span>تغيير الحالة (<span class="selected-count-badge">${window.selectedSubscriberIds ? window.selectedSubscriberIds.size : 0}</span>)</span>
+            </button>
+            <button class="btn btn-secondary btn-sm" id="bulk-edit-subscribers-btn" onclick="window.openBulkEditModal()" style="display: ${window.selectedSubscriberIds && window.selectedSubscriberIds.size > 0 ? 'inline-flex' : 'none'}; align-items: center; gap: 6px; font-weight: 700;">
+              <span>✏️</span> <span>تعديل مجمع (<span class="selected-count-badge">${window.selectedSubscriberIds ? window.selectedSubscriberIds.size : 0}</span>)</span>
+            </button>
             <button class="btn btn-danger btn-sm" id="delete-selected-subscribers-btn" onclick="deleteSelectedSubscribers()" style="display: ${window.selectedSubscriberIds && window.selectedSubscriberIds.size > 0 ? 'inline-flex' : 'none'}; align-items: center; gap: 6px; font-weight: 700;">
-              <span>🗑️</span> <span>حذف المحدد (<span id="selected-subscribers-count">${window.selectedSubscriberIds ? window.selectedSubscriberIds.size : 0}</span>)</span>
+              <span>🗑️</span> <span>حذف المحدد (<span class="selected-count-badge">${window.selectedSubscriberIds ? window.selectedSubscriberIds.size : 0}</span>)</span>
             </button>
           </div>
           <button class="btn btn-outline-danger btn-icon" onclick="confirmDeleteAllSubscribers()" title="حذف الكل والتعاملات" aria-label="حذف الكل والتعاملات">
@@ -1552,15 +1629,646 @@
 
   window.updateSelectedSubscribersToolbar = function() {
     const count = window.selectedSubscriberIds ? window.selectedSubscriberIds.size : 0;
-    const btn = document.getElementById('delete-selected-subscribers-btn');
-    const countSpan = document.getElementById('selected-subscribers-count');
-    if (btn && countSpan) {
-      countSpan.textContent = count;
-      btn.style.display = count > 0 ? 'inline-flex' : 'none';
+    
+    // Top sticky floating toolbar
+    const topToolbar = document.getElementById('subscribers-bulk-toolbar');
+    const topCount = document.getElementById('bulk-selected-count');
+    if (topToolbar) {
+      topToolbar.style.display = count > 0 ? 'flex' : 'none';
+      if (topCount) topCount.textContent = count;
+    }
+
+    // Bottom action bar buttons
+    const bottomBtns = [
+      document.getElementById('bulk-renew-subscribers-btn'),
+      document.getElementById('bulk-status-subscribers-btn'),
+      document.getElementById('bulk-edit-subscribers-btn'),
+      document.getElementById('delete-selected-subscribers-btn')
+    ];
+    bottomBtns.forEach(btn => {
+      if (btn) btn.style.display = count > 0 ? 'inline-flex' : 'none';
+    });
+
+    // Badges across UI
+    document.querySelectorAll('.selected-count-badge, #selected-subscribers-count').forEach(el => {
+      el.textContent = count;
+    });
+
+    // Master checkbox state
+    const masterCb = document.getElementById('select-all-subscribers-checkbox');
+    const allRowCbs = document.querySelectorAll('.subscriber-row-checkbox');
+    if (masterCb && allRowCbs.length > 0) {
+      const checkedCount = Array.from(allRowCbs).filter(cb => cb.checked).length;
+      if (checkedCount === 0) {
+        masterCb.checked = false;
+        masterCb.indeterminate = false;
+      } else if (checkedCount === allRowCbs.length) {
+        masterCb.checked = true;
+        masterCb.indeterminate = false;
+      } else {
+        masterCb.checked = false;
+        masterCb.indeterminate = true;
+      }
     }
   };
 
+  window.clearSubscriberSelection = function() {
+    if (window.selectedSubscriberIds) {
+      window.selectedSubscriberIds.clear();
+    }
+    document.querySelectorAll('.subscriber-row-checkbox').forEach(cb => { cb.checked = false; });
+    const masterCb = document.getElementById('select-all-subscribers-checkbox');
+    if (masterCb) { masterCb.checked = false; masterCb.indeterminate = false; }
+    window.updateSelectedSubscribersToolbar();
+  };
+
+  function checkAdminAccessForBulk() {
+    const user = getEngine()?.currentUser;
+    if (!user) return true;
+    const isAdmin = typeof window.isSystemAdmin === 'function' 
+      ? window.isSystemAdmin(user) 
+      : (user.role === 'admin' || user.role === 'أدمن' || user.role === 'مدير رئيسي' || user.username === 'admin' || user.username === 'abodsari');
+    if (!isAdmin) {
+      window.showToast('عذراً، عمليات التعديل والتجديد المجمع مخصصة للإدارة والمدراء فقط', 'error');
+      return false;
+    }
+    return true;
+  }
+
+  // 1. Bulk Renew Modal (تجديد جماعي مجمع)
+  window.openBulkRenewModal = function() {
+    if (!checkAdminAccessForBulk()) return;
+    if (!window.selectedSubscriberIds || window.selectedSubscriberIds.size === 0) {
+      window.showToast('الرجاء تحديد مشترك واحد على الأقل للتجديد الجماعي', 'warning');
+      return;
+    }
+    const count = window.selectedSubscriberIds.size;
+    const today = new Date().toISOString().substring(0, 10);
+    const modalContainer = document.getElementById('modal-container');
+
+    modalContainer.innerHTML = `
+      <div class="modal-overlay active" onclick="if (event.target === this) window.closeModal()">
+        <div class="modal-dialog" style="max-width: 600px; width: 95%; margin: auto;" onclick="event.stopPropagation()">
+          <div class="modal-header" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); padding: 14px 18px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.3rem;">🔄</span>
+              <h3 style="margin: 0; font-size: 1.1rem; font-weight: 800;">تجديد جماعي لـ (${count}) مشترك</h3>
+            </div>
+            <button type="button" class="modal-close" onclick="window.closeModal()">✕</button>
+          </div>
+          <form id="bulk-renew-form" onsubmit="window.handleBulkRenewSubmit(event); return false;">
+            <div class="modal-body" style="padding: 16px 18px;">
+              
+              <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 12px; margin-bottom: 16px; font-size: 0.88rem; line-height: 1.5;">
+                <span>ℹ️ سيتم تمديد وتفعيل اشتراك المشتركين المحددين (<strong>${count}</strong> مشترك) وتحديث تواريخ الانتهاء والأسعار دفعة واحدة.</span>
+              </div>
+
+              <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+                <div class="form-group" style="margin: 0;">
+                  <label style="font-size: 0.85rem; font-weight: 700; margin-bottom: 4px; display: block;">مدة التجديد *</label>
+                  <select id="bulk-ren-duration" onchange="window.updateBulkRenewPricingPreview()" style="width: 100%; padding: 8px 10px; font-size: 0.9rem; font-weight: 700;">
+                    <option value="1 شهر" data-months="1" selected>1 شهر (شهر واحد)</option>
+                    <option value="2 شهر" data-months="2">2 شهر (شهرين)</option>
+                    <option value="3 شهر" data-months="3">3 شهر (3 أشهر)</option>
+                    <option value="6 شهر" data-months="6">6 شهر (6 أشهر)</option>
+                    <option value="1 سنة" data-months="12">1 سنة (سنة كاملة)</option>
+                  </select>
+                </div>
+
+                <div class="form-group" style="margin: 0;">
+                  <label style="font-size: 0.85rem; font-weight: 700; margin-bottom: 4px; display: block;">طريقة الدفع *</label>
+                  <select id="bulk-ren-payment" style="width: 100%; padding: 8px 10px; font-size: 0.9rem; font-weight: 700;">
+                    <option value="نقد" selected>نقد (تم التسديد)</option>
+                    <option value="دين">دين (تسجيل في الديون)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+                <div class="form-group" style="margin: 0;">
+                  <label style="font-size: 0.85rem; font-weight: 700; margin-bottom: 4px; display: block;">قاعدة تاريخ البدء *</label>
+                  <select id="bulk-ren-start-rule" style="width: 100%; padding: 8px 10px; font-size: 0.88rem;">
+                    <option value="extend" selected>تمديد من تاريخ الانتهاء الحالي (أو اليوم إن كان منتهياً)</option>
+                    <option value="today">بدء الجميع من تاريخ اليوم (${today})</option>
+                  </select>
+                </div>
+
+                <div class="form-group" style="margin: 0;">
+                  <label style="font-size: 0.85rem; font-weight: 700; margin-bottom: 4px; display: block;">السعر الفردي لكل مشترك (د.ع) *</label>
+                  <input type="text" id="bulk-ren-unit-price" value="25,000" style="width: 100%; padding: 8px 10px; font-size: 0.92rem; font-weight: 800; color: var(--green); text-align: center;">
+                </div>
+              </div>
+
+              <div style="margin-bottom: 14px; background: var(--surface-alt); padding: 12px; border-radius: 8px; border: 1px solid var(--line);">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 8px; font-size: 0.88rem; font-weight: 700;">
+                  <input type="checkbox" id="bulk-ren-create-sales" checked style="width: 17px; height: 17px; accent-color: var(--primary);">
+                  <span>تسجيل فواتير تجديد مبيعات تلقائية في سجل المبيعات والتقارير المالية</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.88rem; font-weight: 700;">
+                  <input type="checkbox" id="bulk-ren-set-active" checked style="width: 17px; height: 17px; accent-color: var(--primary);">
+                  <span>تفعيل حالة كافة المشتركين المحددين إلى "فعال" فورياً</span>
+                </label>
+              </div>
+
+              <div id="bulk-ren-summary" style="font-size: 0.85rem; color: var(--muted); text-align: center;">
+                إجمالي المشتركين المحددين للعملية: <strong>${count}</strong> مشترك.
+              </div>
+
+            </div>
+            <div class="modal-footer" style="padding: 12px 18px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 10px;">
+              <button type="button" class="btn btn-secondary" onclick="window.closeModal()">إلغاء</button>
+              <button type="submit" id="btn-bulk-ren-submit" class="btn btn-success" style="padding: 8px 24px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px;">
+                <span>🔄 تطبيق التجديد الجماعي</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+  };
+
+  window.updateBulkRenewPricingPreview = function() {
+    const durationSelect = document.getElementById('bulk-ren-duration');
+    const selectedOption = durationSelect ? durationSelect.options[durationSelect.selectedIndex] : null;
+    const months = selectedOption ? (Number(selectedOption.getAttribute('data-months')) || 1) : 1;
+    let price = 25000;
+    if (months === 1) price = 25000;
+    else if (months === 2) price = 50000;
+    else if (months === 3) price = 75000;
+    else if (months === 6) price = 150000;
+    else if (months === 12) price = 300000;
+    else price = 25000 * months;
+    const priceInput = document.getElementById('bulk-ren-unit-price');
+    if (priceInput) priceInput.value = formatNumber(price);
+  };
+
+  window.handleBulkRenewSubmit = async function(e) {
+    if (e) e.preventDefault();
+    if (!checkAdminAccessForBulk()) return;
+    const btn = document.getElementById('btn-bulk-ren-submit');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<span style="display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-left:6px;"></span> جاري التجديد والحفظ...`;
+    }
+
+    try {
+      const durationSelect = document.getElementById('bulk-ren-duration');
+      const selectedOption = durationSelect ? durationSelect.options[durationSelect.selectedIndex] : null;
+      const duration = durationSelect?.value || '1 شهر';
+      const months = selectedOption ? (Number(selectedOption.getAttribute('data-months')) || 1) : 1;
+      const paymentMethod = document.getElementById('bulk-ren-payment')?.value || 'نقد';
+      const startRule = document.getElementById('bulk-ren-start-rule')?.value || 'extend';
+      const unitPrice = parseNumber(document.getElementById('bulk-ren-unit-price')?.value || '25000');
+      const createSales = document.getElementById('bulk-ren-create-sales')?.checked !== false;
+      const setActive = document.getElementById('bulk-ren-set-active')?.checked !== false;
+
+      const data = getData();
+      const allSubs = data.subscribers || [];
+      const today = new Date().toISOString().substring(0, 10);
+      const targetIds = new Set(Array.from(window.selectedSubscriberIds || []).map(String));
+      const count = targetIds.size;
+
+      const newSales = [];
+      const newDebts = [];
+
+      allSubs.forEach(s => {
+        if (!targetIds.has(String(s.id))) return;
+
+        let startDate = today;
+        if (startRule === 'extend' && s.expiryDate && s.expiryDate >= today) {
+          startDate = s.expiryDate;
+        }
+
+        const endDate = window.addMonthsToDate ? window.addMonthsToDate(startDate, months) : startDate;
+
+        s.subscriptionType = duration;
+        s.startDate = startDate;
+        s.activationDate = startDate;
+        s.expiryDate = endDate;
+        s.endDate = endDate;
+        s.dueDate = endDate;
+        s.price = unitPrice;
+        s.paymentMethod = paymentMethod;
+        s.paymentStatus = (paymentMethod === 'نقد' ? 'مدفوع' : 'دين');
+        s.paidAmount = (paymentMethod === 'نقد' ? unitPrice : 0);
+        s.remainingAmount = (paymentMethod === 'نقد' ? 0 : unitPrice);
+        if (setActive) {
+          s.status = 'فعال';
+          s.activeStatus = 'فعال';
+          s.isActivated = true;
+          s.is_active = true;
+          delete s.deactivated;
+          delete s.deactivatedAt;
+        }
+        s.lastActivatedAt = new Date().toISOString();
+        s.activatedBy = 'المركز الرئيسي (تجديد جماعي)';
+
+        if (createSales) {
+          const saleCode = (typeof window.generateSaleCode === 'function') ? window.generateSaleCode() : ('SR-' + Math.floor(10000 + Math.random() * 90000));
+          const newSale = {
+            id: 'sale-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
+            code: saleCode,
+            customerName: s.name,
+            customerPhone: s.phone || '',
+            seller: s.owner || 'المركز الرئيسي',
+            saleType: 'تجديد اشتراك',
+            deviceNumber: s.deviceNumber || '',
+            subscriptionType: duration,
+            startDate: startDate,
+            endDate: endDate,
+            price: unitPrice,
+            paymentStatus: (paymentMethod === 'نقد' ? 'تم التسديد' : 'دين'),
+            paymentMethod: paymentMethod,
+            agentPaid: (paymentMethod === 'نقد' ? unitPrice : 0),
+            status: 'فعال',
+            activeStatus: 'فعال',
+            createdAt: new Date().toISOString()
+          };
+          newSales.push(newSale);
+
+          if (paymentMethod === 'دين') {
+            newDebts.push({
+              id: 'debt-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
+              saleId: newSale.id,
+              saleCode: saleCode,
+              customerName: s.name,
+              customerPhone: s.phone || '',
+              agentName: s.owner || 'المركز الرئيسي',
+              deviceNumber: s.deviceNumber || '',
+              debtType: 'مبيعات',
+              totalAmount: unitPrice,
+              paidAmount: 0,
+              remainingAmount: unitPrice,
+              status: 'غير مسدد',
+              createdAt: new Date().toISOString()
+            });
+          }
+        }
+      });
+
+      if (typeof getEngine().saveLocal === 'function') getEngine().saveLocal();
+      await getEngine().commitData('subscribers', data.subscribers);
+
+      if (newSales.length > 0) {
+        data.sales = [...newSales, ...(data.sales || [])];
+        await getEngine().commitData('sales', data.sales);
+      }
+      if (newDebts.length > 0) {
+        data.debts = [...newDebts, ...(data.debts || [])];
+        await getEngine().commitData('debts', data.debts);
+      }
+
+      window.showToast(`تم تجديد (${count}) مشترك بنجاح وتحديث كافة السجلات والتواريخ 🎉`, 'success');
+      window.clearSubscriberSelection();
+      window.closeModal();
+
+      if (typeof window.renderSubscribers === 'function') {
+        window.renderSubscribers(document.getElementById('main-content'));
+      }
+    } catch (err) {
+      console.error('Error during bulk renew:', err);
+      window.showToast('حدث خطأ أثناء تنفيذ التجديد الجماعي', 'error');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '🔄 تطبيق التجديد الجماعي';
+      }
+    }
+  };
+
+  // 2. Bulk Status Change Modal (تغيير الحالة المجمع)
+  window.openBulkStatusModal = function() {
+    if (!checkAdminAccessForBulk()) return;
+    if (!window.selectedSubscriberIds || window.selectedSubscriberIds.size === 0) {
+      window.showToast('الرجاء تحديد مشترك واحد على الأقل لتغيير الحالة', 'warning');
+      return;
+    }
+    const count = window.selectedSubscriberIds.size;
+    const modalContainer = document.getElementById('modal-container');
+
+    modalContainer.innerHTML = `
+      <div class="modal-overlay active" onclick="if (event.target === this) window.closeModal()">
+        <div class="modal-dialog" style="max-width: 520px; width: 95%; margin: auto;" onclick="event.stopPropagation()">
+          <div class="modal-header" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); padding: 14px 18px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.3rem;">⚡</span>
+              <h3 style="margin: 0; font-size: 1.1rem; font-weight: 800;">تغيير حالة (${count}) مشترك</h3>
+            </div>
+            <button type="button" class="modal-close" onclick="window.closeModal()">✕</button>
+          </div>
+          <form id="bulk-status-form" onsubmit="window.handleBulkStatusSubmit(event); return false;">
+            <div class="modal-body" style="padding: 16px 18px;">
+              
+              <div class="form-group" style="margin-bottom: 14px;">
+                <label style="font-size: 0.88rem; font-weight: 700; margin-bottom: 6px; display: block;">حالة الاشتراك (Status)</label>
+                <select id="bulk-stat-status" style="width: 100%; padding: 9px 12px; font-size: 0.92rem; font-weight: 700;">
+                  <option value="no-change">-- بدون تغيير --</option>
+                  <option value="فعال" style="color: var(--success); font-weight: 700;">🟢 فعال (تفعيل وتنشيط الاشتراك)</option>
+                  <option value="غير فعال" style="color: var(--danger); font-weight: 700;">🔴 غير فعال (إلغاء التنشيط / إيقاف)</option>
+                </select>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 14px;">
+                <label style="font-size: 0.88rem; font-weight: 700; margin-bottom: 6px; display: block;">حالة الدفع (Payment Status)</label>
+                <select id="bulk-stat-payment" style="width: 100%; padding: 9px 12px; font-size: 0.92rem; font-weight: 700;">
+                  <option value="no-change">-- بدون تغيير --</option>
+                  <option value="مدفوع" style="color: var(--success); font-weight: 700;">✅ مدفوع (تم التسديد بالكامل)</option>
+                  <option value="دين" style="color: var(--danger); font-weight: 700;">⚠️ دين (تسجيل ذمة / غير مدفوع)</option>
+                </select>
+              </div>
+
+              <div style="font-size: 0.82rem; color: var(--muted); background: var(--surface-alt); padding: 10px 14px; border-radius: 8px; border: 1px solid var(--line);">
+                💡 سيتم تطبيق التغييرات المحددة فقط وتحديث كافة المشتركين المحددين فورياً.
+              </div>
+
+            </div>
+            <div class="modal-footer" style="padding: 12px 18px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 10px;">
+              <button type="button" class="btn btn-secondary" onclick="window.closeModal()">إلغاء</button>
+              <button type="submit" id="btn-bulk-stat-submit" class="btn btn-warning" style="padding: 8px 24px; font-weight: 800;">
+                <span>⚡ تطبيق التغيير</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+  };
+
+  window.handleBulkStatusSubmit = async function(e) {
+    if (e) e.preventDefault();
+    if (!checkAdminAccessForBulk()) return;
+    const btn = document.getElementById('btn-bulk-stat-submit');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<span style="display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-left:6px;"></span> جاري التحديث...`;
+    }
+
+    try {
+      const newStatus = document.getElementById('bulk-stat-status')?.value;
+      const newPayment = document.getElementById('bulk-stat-payment')?.value;
+
+      if (newStatus === 'no-change' && newPayment === 'no-change') {
+        window.showToast('لم يتم اختيار أي تغيير لتطبيقه', 'info');
+        window.closeModal();
+        return;
+      }
+
+      const data = getData();
+      const allSubs = data.subscribers || [];
+      const targetIds = new Set(Array.from(window.selectedSubscriberIds || []).map(String));
+      const count = targetIds.size;
+
+      allSubs.forEach(s => {
+        if (!targetIds.has(String(s.id))) return;
+
+        if (newStatus === 'فعال') {
+          s.status = 'فعال';
+          s.activeStatus = 'فعال';
+          s.isActivated = true;
+          s.is_active = true;
+          delete s.deactivated;
+          delete s.deactivatedAt;
+          s.lastActivatedAt = new Date().toISOString();
+        } else if (newStatus === 'غير فعال') {
+          s.status = 'غير فعال';
+          s.activeStatus = 'غير فعال';
+          s.isActivated = false;
+          s.is_active = false;
+          s.deactivated = true;
+          s.deactivatedAt = new Date().toISOString();
+        }
+
+        if (newPayment === 'مدفوع') {
+          s.paymentStatus = 'مدفوع';
+          s.paymentMethod = 'نقد';
+          s.paidAmount = s.price || 25000;
+          s.remainingAmount = 0;
+        } else if (newPayment === 'دين') {
+          s.paymentStatus = 'دين';
+          s.paymentMethod = 'دين';
+          s.remainingAmount = s.price || 25000;
+          s.paidAmount = 0;
+        }
+      });
+
+      if (typeof getEngine().saveLocal === 'function') getEngine().saveLocal();
+      await getEngine().commitData('subscribers', data.subscribers);
+
+      window.showToast(`تم تحديث حالة (${count}) مشترك بنجاح 👍`, 'success');
+      window.clearSubscriberSelection();
+      window.closeModal();
+
+      if (typeof window.renderSubscribers === 'function') {
+        window.renderSubscribers(document.getElementById('main-content'));
+      }
+    } catch (err) {
+      console.error('Error during bulk status update:', err);
+      window.showToast('حدث خطأ أثناء تحديث الحالة المجمعة', 'error');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '⚡ تطبيق التغيير';
+      }
+    }
+  };
+
+  // 3. Comprehensive Bulk Edit Modal (تعديل مجمع شامل)
+  window.openBulkEditModal = function() {
+    if (!checkAdminAccessForBulk()) return;
+    if (!window.selectedSubscriberIds || window.selectedSubscriberIds.size === 0) {
+      window.showToast('الرجاء تحديد مشترك واحد على الأقل للتعديل المجمع', 'warning');
+      return;
+    }
+    const count = window.selectedSubscriberIds.size;
+    const data = getData();
+    const agents = data.agents || [];
+    const modalContainer = document.getElementById('modal-container');
+
+    modalContainer.innerHTML = `
+      <div class="modal-overlay active" onclick="if (event.target === this) window.closeModal()">
+        <div class="modal-dialog" style="max-width: 640px; width: 95%; margin: auto;" onclick="event.stopPropagation()">
+          <div class="modal-header" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); padding: 14px 18px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.3rem;">✏️</span>
+              <h3 style="margin: 0; font-size: 1.1rem; font-weight: 800;">تعديل مجمع شامل لـ (${count}) مشترك</h3>
+            </div>
+            <button type="button" class="modal-close" onclick="window.closeModal()">✕</button>
+          </div>
+          <form id="bulk-edit-form" onsubmit="window.handleBulkEditSubmit(event); return false;">
+            <div class="modal-body" style="padding: 16px 18px;">
+              
+              <div style="background: rgba(37, 99, 235, 0.08); border: 1px solid rgba(37, 99, 235, 0.25); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 0.86rem;">
+                <span>💡 اختر الحقول التي ترغب بتعديلها فقط، الحقول المتروكة على <strong>"بدون تغيير"</strong> ستبقى كما هي لكل مشترك.</span>
+              </div>
+
+              <!-- Row 1: Status & Duration -->
+              <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                <div class="form-group" style="margin: 0;">
+                  <label style="font-size: 0.84rem; font-weight: 700; margin-bottom: 4px; display: block;">تعديل حالة الاشتراك</label>
+                  <select id="be-status" style="width: 100%; padding: 8px 10px; font-size: 0.88rem;">
+                    <option value="no-change">-- بدون تغيير --</option>
+                    <option value="فعال">🟢 فعال</option>
+                    <option value="غير فعال">🔴 غير فعال</option>
+                  </select>
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label style="font-size: 0.84rem; font-weight: 700; margin-bottom: 4px; display: block;">تعديل نوع الاشتراك</label>
+                  <select id="be-type" style="width: 100%; padding: 8px 10px; font-size: 0.88rem;">
+                    <option value="no-change">-- بدون تغيير --</option>
+                    <option value="1 شهر">1 شهر</option>
+                    <option value="2 شهر">2 شهر</option>
+                    <option value="3 شهر">3 شهر</option>
+                    <option value="6 شهر">6 شهر</option>
+                    <option value="1 سنة">1 سنة</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Row 2: Owner/Agent & Payment Status -->
+              <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                <div class="form-group" style="margin: 0;">
+                  <label style="font-size: 0.84rem; font-weight: 700; margin-bottom: 4px; display: block;">الوكيل / المالك المسؤول</label>
+                  <select id="be-owner" style="width: 100%; padding: 8px 10px; font-size: 0.88rem;">
+                    <option value="no-change">-- بدون تغيير --</option>
+                    <option value="المركز الرئيسي">المركز الرئيسي</option>
+                    ${agents.map(a => `<option value="${escapeHtml(a.name)}">${escapeHtml(a.name)} (${escapeHtml(a.code || 'AG')})</option>`).join('')}
+                  </select>
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label style="font-size: 0.84rem; font-weight: 700; margin-bottom: 4px; display: block;">تعديل حالة وطريقة الدفع</label>
+                  <select id="be-payment" style="width: 100%; padding: 8px 10px; font-size: 0.88rem;">
+                    <option value="no-change">-- بدون تغيير --</option>
+                    <option value="نقد">نقد (مدفوع / تم التسديد)</option>
+                    <option value="دين">دين (تسجيل ذمة)</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Row 3: Custom Price & Expiry Date -->
+              <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+                <div class="form-group" style="margin: 0;">
+                  <label style="font-size: 0.84rem; font-weight: 700; margin-bottom: 4px; display: block;">تعديل السعر (د.ع)</label>
+                  <input type="text" id="be-price" placeholder="اتركه فارغاً لعدم التغيير" style="width: 100%; padding: 8px 10px; font-size: 0.88rem;">
+                </div>
+                <div class="form-group" style="margin: 0;">
+                  <label style="font-size: 0.84rem; font-weight: 700; margin-bottom: 4px; display: block;">تحديد تاريخ انتهاء موحد</label>
+                  <input type="date" id="be-expiry" style="width: 100%; padding: 8px 10px; font-size: 0.88rem;">
+                </div>
+              </div>
+
+              <div style="font-size: 0.85rem; color: var(--muted); text-align: center;">
+                سيتم تطبيق هذه التعديلات على عدد <strong>${count}</strong> مشترك محدد.
+              </div>
+
+            </div>
+            <div class="modal-footer" style="padding: 12px 18px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 10px;">
+              <button type="button" class="btn btn-secondary" onclick="window.closeModal()">إلغاء</button>
+              <button type="submit" id="btn-bulk-edit-submit" class="btn btn-primary" style="padding: 8px 24px; font-weight: 800;">
+                <span>💾 حفظ التعديلات المجمعة</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+  };
+
+  window.handleBulkEditSubmit = async function(e) {
+    if (e) e.preventDefault();
+    if (!checkAdminAccessForBulk()) return;
+    const btn = document.getElementById('btn-bulk-edit-submit');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<span style="display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-left:6px;"></span> جاري الحفظ...`;
+    }
+
+    try {
+      const statusVal = document.getElementById('be-status')?.value;
+      const typeVal = document.getElementById('be-type')?.value;
+      const ownerVal = document.getElementById('be-owner')?.value;
+      const paymentVal = document.getElementById('be-payment')?.value;
+      const priceRaw = document.getElementById('be-price')?.value?.trim();
+      const expiryVal = document.getElementById('be-expiry')?.value;
+
+      const hasPriceChange = priceRaw && priceRaw !== '';
+      const customPrice = hasPriceChange ? parseNumber(priceRaw) : null;
+
+      const data = getData();
+      const allSubs = data.subscribers || [];
+      const targetIds = new Set(Array.from(window.selectedSubscriberIds || []).map(String));
+      const count = targetIds.size;
+
+      allSubs.forEach(s => {
+        if (!targetIds.has(String(s.id))) return;
+
+        if (statusVal === 'فعال') {
+          s.status = 'فعال';
+          s.activeStatus = 'فعال';
+          s.isActivated = true;
+          s.is_active = true;
+          delete s.deactivated;
+        } else if (statusVal === 'غير فعال') {
+          s.status = 'غير فعال';
+          s.activeStatus = 'غير فعال';
+          s.isActivated = false;
+          s.is_active = false;
+          s.deactivated = true;
+        }
+
+        if (typeVal !== 'no-change') {
+          s.subscriptionType = typeVal;
+        }
+
+        if (ownerVal !== 'no-change') {
+          s.owner = ownerVal;
+        }
+
+        if (paymentVal === 'نقد') {
+          s.paymentStatus = 'مدفوع';
+          s.paymentMethod = 'نقد';
+          s.paidAmount = s.price || 25000;
+          s.remainingAmount = 0;
+        } else if (paymentVal === 'دين') {
+          s.paymentStatus = 'دين';
+          s.paymentMethod = 'دين';
+          s.remainingAmount = s.price || 25000;
+          s.paidAmount = 0;
+        }
+
+        if (hasPriceChange && customPrice !== null) {
+          s.price = customPrice;
+          if (s.paymentMethod === 'نقد') s.paidAmount = customPrice;
+          else s.remainingAmount = customPrice;
+        }
+
+        if (expiryVal) {
+          s.expiryDate = expiryVal;
+          s.endDate = expiryVal;
+          s.dueDate = expiryVal;
+        }
+      });
+
+      if (typeof getEngine().saveLocal === 'function') getEngine().saveLocal();
+      await getEngine().commitData('subscribers', data.subscribers);
+
+      window.showToast(`تم حفظ وتحديث بيانات (${count}) مشترك بنجاح 👍`, 'success');
+      window.clearSubscriberSelection();
+      window.closeModal();
+
+      if (typeof window.renderSubscribers === 'function') {
+        window.renderSubscribers(document.getElementById('main-content'));
+      }
+    } catch (err) {
+      console.error('Error during bulk edit:', err);
+      window.showToast('حدث خطأ أثناء حفظ التعديلات المجمعة', 'error');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '💾 حفظ التعديلات المجمعة';
+      }
+    }
+  };
+
+  // 4. Delete Selected Subscribers (حذف المحدد)
   window.deleteSelectedSubscribers = function() {
+    if (!checkAdminAccessForBulk()) return;
     if (!window.selectedSubscriberIds || window.selectedSubscriberIds.size === 0) {
       window.showToast('الرجاء تحديد مشترك واحد على الأقل للحذف', 'error');
       return;
@@ -1571,33 +2279,15 @@
       `هل أنت متأكد من رغبتك في حذف ${count} مشتركاً المحددين نهائياً من النظام مع كافة سجلاتهم ومبيعاتهم؟`,
       async () => {
         const idsToDelete = Array.from(window.selectedSubscriberIds);
-        window.selectedSubscriberIds.clear();
-        window.updateSelectedSubscribersToolbar();
+        window.clearSubscriberSelection();
 
-        for (const id of idsToDelete) {
-          const data = getData();
-          const subscriber = (data.subscribers || []).find(s => 
-            String(s.id) === String(id) || 
-            String(s.docId || '') === String(id) || 
-            (s.deviceNumber && String(s.deviceNumber).trim() === String(id).trim())
-          );
-          const targetSub = subscriber || { id: id };
-          const rawDev = (targetSub.deviceNumber || '').trim();
-          const isRealDevice = typeof getEngine().isRealDeviceNumber === 'function' 
-            ? getEngine().isRealDeviceNumber(rawDev) 
-            : (rawDev && rawDev !== '00' && rawDev !== '-' && rawDev.length >= 2);
-          const deviceNumber = isRealDevice ? rawDev : '';
-          const otherSubsWithSameDevice = isRealDevice 
-            ? (data.subscribers || []).filter(s => String(s.id) !== String(id) && s.deviceNumber && String(s.deviceNumber).trim() === deviceNumber)
-            : [];
-
-          if (typeof getEngine().deleteSubscriberCompletely === 'function') {
-            await getEngine().deleteSubscriberCompletely(targetSub.id || id, otherSubsWithSameDevice.length > 0 ? null : deviceNumber, targetSub);
-          } else {
-            const updatedSubscribers = (data.subscribers || []).filter(s => String(s.id) !== String(id));
-            data.subscribers = updatedSubscribers;
-            if (typeof getEngine().saveLocal === 'function') getEngine().saveLocal();
-            await getEngine().commitData('subscribers', updatedSubscribers);
+        if (getEngine() && typeof getEngine().bulkDeleteSubscribers === 'function') {
+          await getEngine().bulkDeleteSubscribers(idsToDelete);
+        } else {
+          for (const id of idsToDelete) {
+            if (typeof getEngine().deleteSubscriberCompletely === 'function') {
+              await getEngine().deleteSubscriberCompletely(id);
+            }
           }
         }
 
@@ -2343,9 +3033,13 @@
           if (!existing.joiningDate) {
             existing.joiningDate = activationDate || today;
           }
+          if (!existing.createdAtTimestamp) {
+            existing.createdAtTimestamp = Date.now();
+          }
+          existing.updatedAt = new Date().toISOString();
         } else {
-          subs.push({
-            id: 'sub-' + Date.now(),
+          const newSubObj = {
+            id: 'sub-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
             name, phone, deviceNumber, owner,
             joiningDate: activationDate || today,
             activationDate, startDate: activationDate,
@@ -2362,16 +3056,21 @@
             deactivated: status !== 'فعال',
             activatedBy: 'المركز الرئيسي',
             activatedByType: 'hq',
-            requestedByAgent: false
-          });
+            requestedByAgent: false,
+            createdAtTimestamp: Date.now(),
+            updatedAt: new Date().toISOString()
+          };
+          subs.unshift(newSubObj);
         }
+
+        const subToSync = existing || subs[0];
 
         try {
           localStorage.removeItem('sari_all_subscribers_cleared');
           localStorage.removeItem('sari_subscribers_cleared_timestamp');
         } catch (e) {}
         if (getEngine() && typeof getEngine().unmarkTombstone === 'function') {
-          getEngine().unmarkTombstone(existing ? existing.id : null, deviceNumber, name);
+          getEngine().unmarkTombstone(subToSync.id, deviceNumber, name);
         }
 
         // Immediately close modal & update UI (Optimistic UI)
@@ -2382,8 +3081,12 @@
           if (mainEl) window.renderSubscribers(mainEl);
         }
 
-        // Sync in background
-        getEngine().commitData('subscribers', subs).catch(err => console.warn('Background sync error:', err));
+        // Sync immediately to Firestore and central state
+        if (getEngine() && typeof getEngine().saveSubscriberDirect === 'function') {
+          getEngine().saveSubscriberDirect(subToSync).catch(err => console.warn('Direct subscriber sync error:', err));
+        } else if (getEngine() && typeof getEngine().commitData === 'function') {
+          getEngine().commitData('subscribers', subs).catch(err => console.warn('Background sync error:', err));
+        }
       } catch (err) {
         console.error('Error saving subscriber:', err);
         window.showToast('حدث خطأ أثناء حفظ بيانات المشترك', 'error');
