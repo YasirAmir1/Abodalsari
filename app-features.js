@@ -3343,30 +3343,13 @@
 
             const row = json[r];
             if (!row || !row[nameIdx]) continue;
-            const name = String(row[nameIdx] || '').trim();
-            const rawDev = normalizeDigits(String(row[devIdx] || '')).replace(/\s+/g, '');
+            
+            // Extract ONLY required columns
+            const name = nameIdx !== -1 ? String(row[nameIdx] || '').trim() : '';
+            const rawDev = devIdx !== -1 ? normalizeDigits(String(row[devIdx] || '')).replace(/\s+/g, '') : '';
             const device = window.formatDeviceNumber ? window.formatDeviceNumber(rawDev) : rawDev;
             const phone = phoneIdx !== -1 ? String(row[phoneIdx] || '').trim() : '';
             const owner = ownerIdx !== -1 && row[ownerIdx] ? String(row[ownerIdx]).trim() : 'المركز الرئيسي';
-
-            // New imported subscribers: dates and status default to empty/not active ('غير فعال')
-            const activationDate = (actIdx !== -1 && row[actIdx]) ? String(row[actIdx]).trim() : '';
-            const expiryDate = (expIdx !== -1 && row[expIdx]) ? String(row[expIdx]).trim() : '';
-
-            let status = 'غير فعال';
-            if (statusIdx !== -1 && row[statusIdx]) {
-              const fileStatus = String(row[statusIdx]).trim();
-              if (fileStatus === 'فعال' && activationDate && expiryDate) {
-                status = 'فعال';
-              } else {
-                status = 'غير فعال';
-              }
-            } else if (activationDate && expiryDate) {
-              const today = new Date().toISOString().substring(0, 10);
-              status = (activationDate <= today && today <= expiryDate) ? 'فعال' : 'غير فعال';
-            } else {
-              status = 'غير فعال';
-            }
 
             if (name && device) {
               existingSubs.push({
@@ -3375,9 +3358,10 @@
                 phone,
                 deviceNumber: device,
                 owner,
-                activationDate: activationDate || '',
-                expiryDate: expiryDate || '',
-                status: status || 'غير فعال'
+                status: 'غير فعال',       // Default: Inactive
+                payment: null,          // Default: Empty
+                activationDate: '-',    // Default: Empty/Hyphen
+                expiryDate: '-'         // Default: Empty/Hyphen
               });
               importedCount++;
             }

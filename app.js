@@ -1595,7 +1595,7 @@
   };
 
   window.deleteSale = async function(id) {
-    window.showConfirmModal('حذف الفاتورة', 'هل تريد حذف هذه الفاتورة وسجلات الديون المرتبطة بها نهائياً لعدم الحذف بالخطأ؟', async () => {
+    window.showSecureConfirmModal('حذف الفاتورة', 'هل تريد حذف هذه الفاتورة وسجلات الديون المرتبطة بها نهائياً لعدم الحذف بالخطأ؟', async () => {
       const data = getData();
       const saleToDelete = (data.sales || []).find(s => s.id === id);
       const debtsToDelete = (data.debts || []).filter(d => d.saleId === id || (saleToDelete && d.saleCode === saleToDelete.code));
@@ -1605,7 +1605,7 @@
         await getEngine().deleteItem('debts', d.id);
       }
       showToast('تم حذف الفاتورة وسجلات الديون المرتبطة بنجاح', 'success');
-    }, 'حذف الفاتورة', 'إلغاء', true);
+    }, 'DELETE');
   };
 
   window.approveSubmission = function(subId, paymentMethod) {
@@ -2940,4 +2940,63 @@ ${customerPhone ? `📞 *الهاتف:* ${customerPhone}\n` : ""}📅 *فترة 
     }
   });
 
+
 })();
+
+window.showSecureConfirmModal = function(title, message, onConfirm, confirmKeyword = 'CONFIRM') {
+  const modalContainer = document.getElementById('modal-container');
+  if (!modalContainer) return;
+
+  modalContainer.innerHTML = `
+    <div class="modal-overlay active" style="z-index: 9999;" onclick="if (event.target === this) window.closeModal()">
+      <div class="modal-dialog" style="max-width: 440px; text-align: right; direction: rtl;" onclick="event.stopPropagation()">
+        <div class="modal-header" style="border-bottom: 1px solid var(--line); padding-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 1.5rem;">⚠️</span>
+            <h3 style="margin: 0; font-size: 1.15rem; color: #dc2626;">${escapeHtml(title)}</h3>
+          </div>
+          <button type="button" class="modal-close" onclick="window.closeModal()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--muted);">✕</button>
+        </div>
+        <div class="modal-body" style="padding: 20px 0; color: var(--text); font-size: 0.95rem; line-height: 1.6;">
+          <p style="margin-bottom: 15px; color: #dc2626; font-weight: 700;">تنبيه أمني عالي الخطورة - إجراء إداري نهائي</p>
+          <p style="margin-bottom: 15px;">${escapeHtml(message)}</p>
+          <p style="margin-bottom: 10px; font-weight: 600;">يرجى كتابة "${confirmKeyword}" لتأكيد هذا الإجراء النهائي (غير قابل للتراجع):</p>
+          <input type="text" id="secure-confirm-input" class="form-control" placeholder="${confirmKeyword}" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+        </div>
+        <div class="modal-footer" style="border-top: 1px solid var(--line); padding-top: 14px; display: flex; gap: 10px; justify-content: flex-end;">
+          <button type="button" class="btn btn-secondary" onclick="window.closeModal()">إلغاء</button>
+          <button type="button" id="custom-secure-confirm-btn" class="btn btn-danger" disabled>تأكيد الإجراء</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const input = document.getElementById('secure-confirm-input');
+  const confirmBtn = document.getElementById('custom-secure-confirm-btn');
+
+  input.addEventListener('input', () => {
+    confirmBtn.disabled = input.value !== confirmKeyword;
+  });
+
+  confirmBtn.onclick = async () => {
+    if (input.value === confirmKeyword) {
+      window.closeModal();
+      await onConfirm();
+      if(window.logAdminAction) await window.logAdminAction(title);
+    }
+  };
+};
+
+window.logAdminAction = async function(actionName) {
+  const engine = window.syncEngine || (typeof getEngine === 'function' ? getEngine() : null);
+  if (!engine || !engine.db) return;
+  try {
+    await engine.db.collection('admin_logs').add({
+      action: actionName,
+      timestamp: new Date().toISOString(),
+      userId: engine.currentUser?.uid || 'unknown'
+    });
+  } catch(e) {
+    console.error('Logging failed', e);
+  }
+};

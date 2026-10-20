@@ -2022,8 +2022,10 @@
       updatedAt: new Date().toISOString()
     };
 
-    await getEngine().commitData('pricing', newPricing);
-    window.showToast('تم حفظ واعتماد جدول الأسعار بنجاح! الأسعار الجديدة معتمدة للعمليات القادمة', 'success');
+    window.showSecureConfirmModal('حفظ وتثبيت الأسعار', 'هل أنت متأكد من حفظ وتثبيت الأسعار الجديدة لكافة الوكلاء والمركز؟ لا يمكن التراجع عن هذا الإجراء.', async () => {
+        await getEngine().commitData('pricing', newPricing);
+        window.showToast('تم حفظ واعتماد جدول الأسعار بنجاح! الأسعار الجديدة معتمدة للعمليات القادمة', 'success');
+    }, 'CONFIRM');
   };
 
   window.savePricingSettings = window.saveAllPricingTable;
@@ -2303,7 +2305,7 @@
   };
 
   window.deleteUser = function(uid) {
-    window.showConfirmModal('حذف الحساب نهائياً', 'هل تريد حذف حساب المستخدم هذا نهائياً؟ سيتم مسح الحساب ولن يعود عند إعادة تحميل الصفحة.', async () => {
+    window.showSecureConfirmModal('حذف الحساب نهائياً', 'هل تريد حذف حساب المستخدم هذا نهائياً؟ سيتم مسح الحساب ولن يعود عند إعادة تحميل الصفحة.', async () => {
       const data = getData();
       const targetUser = (data.users || []).find(u => u.uid === uid || u.id === uid);
       if (getEngine() && typeof getEngine().addDeletedUserTombstone === 'function') {
@@ -2315,7 +2317,7 @@
         const mainEl = document.getElementById('main-content');
         if (mainEl) window.renderUsers(mainEl);
       }
-    }, 'حذف الحساب نهائياً', 'إلغاء', true);
+    }, 'DELETE');
   };
 
   window.activateLegacyAccounts = function() {
